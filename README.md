@@ -51,9 +51,52 @@ Behaviour on failure:
 ```bash
 npm test             # unit tests, incl. a real node:http server for dropped bodies
 npm run test:e2e     # against the real mock-erp, started as a child process
-                     # (needs `npm install` in mock-erp/ first)
+                     # (needs `npm install` in mock-erp/ first, and a database, see below)
 cd mock-erp && npm test
 ```
+
+## Sync job
+
+`src/sync/` fetches the whole catalogue page by page and stores it in PostgreSQL (spec: [`specs/003-sync-job`](specs/003-sync-job/requirements.md)).
+
+```bash
+docker compose up -d                                   # PostgreSQL 17 on :5432
+export DATABASE_URL=postgres://sync:sync@localhost:5432/sync
+npm run migrate                                        # separate step; the app never migrates itself
+(cd mock-erp && npm install && npm start)              # unreliable ERP on :4000
+npm run start:dev
+curl -i -X POST localhost:3000/sync                    # 202 + Location: /sync/runs/<id>
+curl localhost:3000/sync/runs/1
+```
+
+| Endpoint              | Result                                                              |
+| --------------------- | ------------------------------------------------------------------- |
+| `POST /sync`          | 202 with `{ id, status, trigger }` and `Location`; 409 with `runningRunId` if a run is active |
+| `GET /sync/runs`      | Newest runs first, `?limit=1..100` (default 20)                      |
+| `GET /sync/runs/:id`  | One run with counters, `failedPages` and `error`; 404 if unknown     |
+
+**Run status:** `completed`: every page stored, missing products deactivated. `partial`: some pages still missing after the second pass, `total` changed during the run, or more than `SYNC_MAX_DEACTIVATE_RATIO` would have been deactivated. Stored pages are kept, nothing is deactivated. `failed`: page 1 failed, too many pages failed in a row, database error, shutdown, or abandoned (no heartbeat for `maxDurationMs + SYNC_STALE_MARGIN_MS`).
+
+| Env var                         | Default        | Meaning                                                  |
+| ------------------------------- | -------------- | -------------------------------------------------------- |
+| `DATABASE_URL`                  | –              | Required                                                 |
+| `SYNC_PAGE_SIZE`                | `100`          | 1–1000                                                   |
+| `SYNC_CRON`                     | `*/15 * * * *` | Schedule; a tick during a running run is skipped         |
+| `SYNC_SCHEDULE_ENABLED`         | `true`         | `true` or `false`                                        |
+| `SYNC_MAX_CONSECUTIVE_FAILURES` | `3`            | Abort the run as `failed` after this many failed pages in a row |
+| `SYNC_MAX_DEACTIVATE_RATIO`     | `0.1`          | Refuse to deactivate more than this share of active products |
+| `SYNC_STALE_MARGIN_MS`          | `60000`        | Added to `maxDurationMs` (130 s) to detect abandoned runs |
+
+Measured against the mock with default rates and page size 100: one run of 10,000 products took 49 s (simulation: median 50 s, p99 81 s).
+
+### Database tests
+
+```bash
+npm run test:db      # repositories, migration, runner against real PostgreSQL
+npm run test:e2e     # whole service against mock-erp and PostgreSQL
+```
+
+Both use `TEST_DATABASE_URL` if set (CI service container, environments without Docker), otherwise they start `postgres:17-alpine` with Testcontainers (needs Docker). Each test file migrates its own schema and drops it afterwards, so an existing database stays clean. `npm test` needs neither Docker nor a database.
 
 ## Project setup
 

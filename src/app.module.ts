@@ -3,6 +3,7 @@ import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { ErpModule } from './erp/erp.module.js';
+import { SyncModule } from './sync/sync.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -16,6 +17,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       serviceId: 'api-sync-service',
     }),
     ErpModule,
+    SyncModule,
   ],
   controllers: [AppController],
   providers: [AppService],

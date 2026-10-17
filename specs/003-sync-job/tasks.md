@@ -1,29 +1,25 @@
 # 003 – Sync-Job: Aufgaben
 
-> Status: Spec reviewt. Änderungen aus der Review: Heartbeat vor jedem `fetchPage` (AK-7.3, AK-7.3a), doppelte IDs in einer Seite (AK-3.9), Datenbank-Tests auch ohne Docker über `TEST_DATABASE_URL` (Anforderung 11).
+> Status: umgesetzt, in vier Commits (Migration, Repositories, Runner/Service, API). Spec vor dem Code reviewt; Änderungen aus der Review: Heartbeat vor jedem `fetchPage` (AK-7.3, AK-7.3a), doppelte IDs in einer Seite (AK-3.9), Datenbank-Tests auch ohne Docker über `TEST_DATABASE_URL` (Anforderung 11).
+>
+> Tests: 179 Unit-Tests (`npm test`, ohne DB), 61 DB-Tests (`npm run test:db`), 12 E2E-Tests (`npm run test:e2e`, rund 17 s). Gegenprobe mit absichtlich eingebauten Fehlern: Heartbeat nur beim Speichern (der Review-Befund), keine Deduplizierung, Heartbeat ohne Fencing, keine Übernahme verwaister Läufe, keine Deaktivierungs-Sperre, kein zweiter Durchgang, Deaktivierung trotz `partial`. Jeder lässt Tests fehlschlagen.
 
-- [ ] **T1** Abhängigkeiten: `pg`, `node-pg-migrate`, `@nestjs/schedule`; dev: `@testcontainers/postgresql`. `docker-compose.yml` mit PostgreSQL 17 für die lokale Entwicklung.
-- [ ] **T1a** Test-Infrastruktur: `vitest.config.db.ts`, `globalSetup` mit `TEST_DATABASE_URL` oder Testcontainers, Helfer für ein Schema pro Datei; `npm run test:db`. → AK-11.1–11.4
-- [ ] **T2** `migrations/001_init.sql` und `npm run migrate`; Test: leere DB migrieren, zweimal migrieren, Constraints verletzen. → AK-1.1–1.4
-- [ ] **T3** `src/sync/sync-config.ts` mit Validierung und Unit-Tests. → AK-9.1, AK-9.2
-- [ ] **T4** `src/sync/page-diff.ts` (rein) mit Unit-Tests: neu, geändert je Feld, unverändert, reaktiviert, reaktiviert + geändert, Duplikat in einer Seite (letzte gewinnt, einmal gezählt). → AK-3.1–3.4, AK-3.9
-- [ ] **T5** `src/sync/run-status.ts` (rein) mit Unit-Tests: Tabelle aus dem Design als `it.each`. → AK-4.3
-- [ ] **T6** `products.repository.ts` gegen echte DB: Seite in einer Transaktion (Fehler mitten in der Seite → nichts gespeichert), Zähler, `last_seen_run_id`, Deaktivierung mit Sperre, keine Löschung. → AK-3.5, AK-3.6, AK-6.1, AK-6.3, AK-6.4
-- [ ] **T7** `sync-runs.repository.ts` gegen echte DB: Start, zweiter Start → «läuft schon», zwei gleichzeitige Starts → genau einer gewinnt, verwaister Lauf wird übernommen, Fencing beim Heartbeat, Abschluss mit Zählern und `failed_pages`, Abfragen. → AK-4.1, AK-4.2, AK-4.5, AK-7.1–7.6
-- [ ] **T8** `sync-runner.ts` mit `ProductSource`- und `sleep`-Attrappen und echter DB:
-  - Alle Seiten ok → `completed`, Deaktivierung. → AK-2.1, AK-6.1
-  - Seite 1 scheitert einmal / zweimal. → AK-2.2
-  - `total = 0`, `total` ändert sich. → AK-2.3, AK-2.4
-  - Seite scheitert, zweiter Durchgang mit Wartezeit = grösstes `retryAfterMs`, gelingt / scheitert. → AK-5.1, AK-5.2, AK-5.5
-  - Endgültige und `rateLimited` Seiten nicht im zweiten Durchgang. → AK-5.3, AK-5.4
-  - Drei Fehler in Folge → `failed`. → AK-5.6
-  - Heartbeat vor jedem `fetchPage`, auch nach gescheiterten Seiten; zwei langsam scheiternde Seiten machen den Lauf nicht verwaist. → AK-7.3, AK-7.3a
-  - Fencing vor `fetchPage`: kein weiterer Abruf. → AK-7.5
-  - Duplikat innerhalb einer Seite gegen echte DB. → AK-3.9
-  - `partial`/`failed` deaktiviert nichts. → AK-6.2
-  - DB-Fehler → `failed`. → AK-3.8
-  - Abbruch über `AbortSignal` → `failed`, `aborted: shutdown`. → AK-2.5, AK-8.4
-- [ ] **T9** `sync.service.ts`, `sync.controller.ts`, `sync.scheduler.ts`, `sync.module.ts`; Tests mit Supertest: 202 + `Location`, 409 mit `runningRunId`, `GET /sync/runs` (Sortierung, `limit`), `GET /sync/runs/:id` (404), Zeitplan-Tick während eines Laufs übersprungen, Shutdown bricht ab. → AK-4.4, AK-7.1, AK-8.1–8.4
-- [ ] **T10** Ende-zu-Ende gegen Mock-ERP und Test-DB: Raten 0 zweimal, Standardraten einmal. → AK-10.1, AK-10.2
-- [ ] **T11** README: Datenbank starten, migrieren, Konfiguration, Endpunkte, Status-Bedeutung.
-- [ ] **T12** Laufzeit eines echten Laufs gegen das Mock messen und mit der Simulation vergleichen (Median 50 s, p99 81 s).
+- [x] **T1** Abhängigkeiten: `pg`, `node-pg-migrate`, `@nestjs/schedule`, `cron`; dev: `@types/pg`, `@testcontainers/postgresql`. `docker-compose.yml` mit PostgreSQL 17.
+- [x] **T1a** Test-Infrastruktur: `vitest.config.db.ts`, `test/db/global-setup.ts` (`TEST_DATABASE_URL` oder Testcontainers), `test/db/test-database.ts` (Schema pro Datei über `options=-c search_path`), `npm run test:db`. Beide Wege geprüft: Testcontainers rund 15 s Start, `TEST_DATABASE_URL` 0.5 s. → AK-11.1–11.4
+  - Test-Migrationen mit `noLock`: Der Advisory Lock von node-pg-migrate gilt für die ganze Datenbank und liess parallele Testdateien scheitern («Another migration is already running»). `npm run migrate` behält den Lock.
+- [x] **T2** `migrations/001_init.sql`, `npm run migrate`; 14 Tests (Spalten, zweimal migrieren, Constraints, ein `running`). Die Testdatei liegt in `test/db/`, weil node-pg-migrate jede Datei in `migrations/` als Migration liest. → AK-1.1–1.4, AK-7.2
+- [x] **T3** `sync-config.ts` mit 17 Unit-Tests. → AK-9.1, AK-9.2
+- [x] **T4** `page-diff.ts` (rein) mit 13 Unit-Tests. → AK-3.1–3.4, AK-3.9
+- [x] **T5** `run-status.ts` (rein) mit 8 Unit-Tests. → AK-4.3
+- [x] **T6** `products.repository.ts`, 11 DB-Tests. → AK-3.1–3.7, AK-3.9, AK-6.1, AK-6.3, AK-6.4
+  - AK-3.9 gegen echte PostgreSQL: ohne Deduplizierung meldet sie «ON CONFLICT DO UPDATE command cannot affect row a second time» (separat geprüft).
+- [x] **T7** `sync-runs.repository.ts`, 12 DB-Tests, u. a. zehn gleichzeitige Starts über eigene Pools → genau einer gewinnt. → AK-4.1, AK-4.2, AK-4.4, AK-7.1–7.6
+- [x] **T8** `sync-runner.ts`, 24 DB-Tests mit geskriptetem ERP. → AK-2.x, AK-3.8, AK-5.x, AK-6.1–6.3, AK-7.3, AK-7.3a, AK-7.5, AK-8.4
+  - AK-7.3a bildet den Review-Fall nach: Zwei scheiternde Seiten «dauern» je 130 s (Heartbeat in der DB zurückgesetzt), danach versucht ein `POST /sync` zu starten → 409, der Lauf endet `completed`.
+- [x] **T9** `sync.service.ts`, `sync.controller.ts`, `sync.scheduler.ts`, `sync.module.ts`, `src/db/database.ts`; `enableShutdownHooks()` in `main.ts` (fehlte, ohne es erreicht SIGTERM die Hooks nicht). 5 + 5 Unit-Tests, Controller über E2E. → AK-4.4, AK-7.1, AK-8.1–8.4
+- [x] **T10** `test/sync.e2e-spec.ts`: voller Lauf + 409 + zweiter Lauf unverändert, Abfragen, Standardraten (Seitengrösse 1000), Shutdown in < 5 s, ungültige Konfiguration. → AK-9.2, AK-10.1, AK-10.2
+  - Befund: Ein abgewiesener Start (409) verbraucht trotzdem eine ID, weil Identity-Werte bei einem gescheiterten `INSERT` nicht zurückgerollt werden. Lauf-IDs haben also Lücken; Clients müssen die ID aus der Antwort bzw. `Location` nehmen.
+- [x] **T11** README: Datenbank, Migration, Endpunkte, Status, Konfiguration, Tests.
+- [x] **T12** Gemessen mit dem echten Service (`node dist/main.js`) gegen das Mock mit Standardraten, Seitengrösse 100: 49 s für 10'000 Produkte (Simulation: Median 50 s). Seite 49 scheiterte im ersten Durchgang und kam im zweiten, Lauf `completed`. Absturz-Test: Prozess hart beendet → Lauf bleibt `running` → `POST /sync` 409 → nach gealtertem Heartbeat übernimmt der nächste Lauf.
+- [ ] **T13** CI: Service-Container PostgreSQL + `TEST_DATABASE_URL`, `npm install` in `mock-erp/`, dann `npm test`, `npm run test:db`, `npm run test:e2e`, `cd mock-erp && npm test` (zusammen mit 001 T11, 002 T8).
+- [ ] **T14** Authentifizierung für `POST /sync` und `GET /sync/runs` (siehe «Nicht im Umfang»), vor produktivem Einsatz.
