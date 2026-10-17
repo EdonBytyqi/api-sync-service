@@ -23,7 +23,43 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Syncs a product catalogue from an unreliable ERP into PostgreSQL, with retries, run logging, crash recovery and an Angular dashboard. Specs live in [`specs/`](specs/): 001 mock ERP, 002 ERP client, 003 sync job, 004 dashboard, 005 Docker and CI.
+
+[![CI](https://github.com/EdonBytyqi/api-sync-service/actions/workflows/ci.yml/badge.svg)](https://github.com/EdonBytyqi/api-sync-service/actions/workflows/ci.yml)
+
+## Everything with Docker
+
+```bash
+docker compose up --build        # → http://localhost:8080
+```
+
+This starts PostgreSQL, a one-off migration, the mock ERP (unreliable by default), the service and the dashboard. Each waits for the previous one's health check. Data survives restarts in the `pgdata` volume; `docker compose down -v` wipes it.
+
+| Variable                                           | Default        | Purpose                                                     |
+| -------------------------------------------------- | -------------- | ----------------------------------------------------------- |
+| `DASHBOARD_PORT`, `SERVICE_PORT`, `POSTGRES_PORT`, `MOCK_PORT` | 8080, 3000, 5432, 4000 | Host ports (bound to 127.0.0.1), e.g. `POSTGRES_PORT=5433` if 5432 is taken |
+| `FAILURE_RATE`, `SLOW_RATE`, `RATE_LIMIT_RATE`     | 0.2, 0.1, 0.05 | Mock chaos; `0` for a stable demo                           |
+| `SYNC_SCHEDULE_ENABLED`, `SYNC_CRON`               | true, `*/15 * * * *` | Scheduled syncs                                       |
+| `POSTGRES_PASSWORD`                                | `sync`         | Local development only                                      |
+
+`docker compose up postgres` starts only the database, e.g. for `TEST_DATABASE_URL`. To run the smoke test against a running stack, start it with the chaos rates at 0 and the schedule off, then run `bash scripts/smoke.sh`.
+
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `main` and on every pull request, with one job per suite:
+
+| Job        | What it runs                                                                      |
+| ---------- | --------------------------------------------------------------------------------- |
+| service    | `npm run lint`, `npm run build`, `npm test` (unit, no database)                   |
+| mock-erp   | `npm test` in `mock-erp/`                                                         |
+| database   | `npm run test:db` against a PostgreSQL 17 service container (`TEST_DATABASE_URL`) |
+| e2e        | `npm run test:e2e`: service + real mock-erp + PostgreSQL service container        |
+| dashboard  | `ng test` incl. axe-core, `scripts/contrast.mjs`, production build                |
+| docker     | after all others: `docker compose up --wait` with chaos 0, then `scripts/smoke.sh` |
+
+New commits on a PR cancel its running CI; pushes to `main` always finish. No secrets are needed.
+
+**Branch protection** is a repository setting, not a file. To make these checks mandatory: *Settings → Branches → Add rule* for `main`, enable "Require status checks to pass", and select all six jobs.
 
 ## ERP client
 

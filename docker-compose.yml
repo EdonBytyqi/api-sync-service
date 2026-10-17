@@ -1,17 +1,95 @@
-# Local PostgreSQL for development and for TEST_DATABASE_URL.
-#   docker compose up -d
-#   DATABASE_URL=postgres://sync:sync@localhost:5432/sync npm run migrate
+# The whole system (spec 005):  docker compose up --build   → http://localhost:8080
+# Only the database (development, TEST_DATABASE_URL):  docker compose up postgres
+#
+# Host ports are bound to 127.0.0.1 and can be changed without editing this
+# file, e.g. POSTGRES_PORT=5433 docker compose up when 5432 is already taken.
+
+name: api-sync-service
+
+x-database-url: &database-url postgres://sync:${POSTGRES_PASSWORD:-sync}@postgres:5432/sync
+
 services:
   postgres:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: sync
-      POSTGRES_PASSWORD: sync
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sync}
       POSTGRES_DB: sync
     ports:
-      - '5432:5432'
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U sync -d sync']
       interval: 2s
-      timeout: 2s
+      timeout: 3s
+      retries: 30
+
+  # Runs once, then exits. The service never migrates itself (spec 003, AK-1.3).
+  migrate:
+    build: .
+    image: api-sync-service:local
+    init: true
+    command: ['node', 'node_modules/node-pg-migrate/bin/node-pg-migrate.js', 'up', '--migrations-dir', 'migrations']
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  mock-erp:
+    build: ./mock-erp
+    init: true
+    environment:
+      PORT: 4000
+      # Unreliable by default, that is the point; set to 0 for a stable demo.
+      FAILURE_RATE: ${FAILURE_RATE:-0.2}
+      SLOW_RATE: ${SLOW_RATE:-0.1}
+      RATE_LIMIT_RATE: ${RATE_LIMIT_RATE:-0.05}
+    ports:
+      - '127.0.0.1:${MOCK_PORT:-4000}:4000'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:4000/health || exit 1']
+      interval: 2s
+      timeout: 3s
       retries: 15
+
+  service:
+    build: .
+    image: api-sync-service:local
+    # A tiny init as PID 1 forwards SIGTERM to node and reaps zombies.
+    init: true
+    environment:
+      DATABASE_URL: *database-url
+      ERP_BASE_URL: http://mock-erp:4000
+      SYNC_SCHEDULE_ENABLED: ${SYNC_SCHEDULE_ENABLED:-true}
+      SYNC_CRON: ${SYNC_CRON:-*/15 * * * *}
+    ports:
+      - '127.0.0.1:${SERVICE_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      mock-erp:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/health || exit 1']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    # Time for a running sync to be recorded as "aborted: shutdown" (AK-3.6).
+    stop_grace_period: 30s
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - '127.0.0.1:${DASHBOARD_PORT:-8080}:80'
+    depends_on:
+      service:
+        condition: service_healthy
+
+volumes:
+  pgdata:

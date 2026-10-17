@@ -27,7 +27,7 @@ Die bestehende `docker-compose.yml` (nur PostgreSQL) wird ersetzt. Wer nur die D
 
 **Mock-ERP** (`mock-erp/Dockerfile`): `node:22-alpine`, `npm ci --omit=dev`, `USER node`.
 
-**Dashboard** (`dashboard/Dockerfile`): Build mit Node, Auslieferung mit `nginx:1.27-alpine` wie in App A. `nginx.conf`: `location /api/ { proxy_pass http://service:3000/; }` (der abschliessende Slash entfernt `/api`), `try_files $uri /index.html` für Angular-Routen.
+**Dashboard** (`dashboard/Dockerfile`): Build mit Node, Auslieferung mit `nginx:1.27-alpine` wie in App A. `nginx.conf`: `location /api/ { proxy_pass http://service:3000/; }` (der abschliessende Slash entfernt `/api`), `proxy_redirect / /api/` und `absolute_redirect off`, damit `Location: /sync/runs/7` als `/api/sync/runs/7` beim Browser ankommt (ohne `absolute_redirect off` machte nginx daraus `http://localhost/api/…` mit dem Container-Port 80; vom Smoke-Test gefunden), `try_files $uri /index.html` für Angular-Routen.
 
 ## CI-Workflow
 
@@ -73,7 +73,16 @@ env:
 
 **Ports nur an `127.0.0.1`.** Die Compose-Datei ist für die lokale Entwicklung. Gebunden an alle Interfaces wäre die Datenbank mit Standardpasswort im ganzen Netz sichtbar.
 
-**`CMD ["node", "dist/main.js"]`, nie `npm run start:prod` (Review-Befund).** Docker schickt SIGTERM an PID 1 im Container. Mit `npm run …` ist das npm, und npm reicht SIGTERM nicht zuverlässig an den Node-Prozess weiter. Der Service merkt nichts, Docker wartet `stop_grace_period` ab und beendet ihn hart mit SIGKILL. Der laufende Lauf bleibt auf `running` liegen und wird erst nach 190 s als verwaist übernommen. Mit Node direkt kommt SIGTERM bei `enableShutdownHooks()` an. Zusätzlich `init: true` in Compose: Ein kleines Init (tini) ist PID 1, reicht Signale weiter und räumt Zombie-Prozesse ab. Dasselbe gilt für Mock (`node server.js`) und Migration (`node node_modules/node-pg-migrate/bin/node-pg-migrate.js up`). Geprüft wird es mit `docker compose stop service` während eines Laufs: Der Lauf muss danach `failed` mit `aborted: shutdown` sein, nicht `running`.
+**`CMD ["node", "dist/main.js"]`, nie `npm run start:prod` (Review-Befund).** Docker schickt SIGTERM an PID 1 im Container. Mit `npm run …` ist das npm, und der Service hängt davon ab, ob npm das Signal an den Node-Prozess weiterreicht. Kommt es nicht an, wartet Docker `stop_grace_period` ab und beendet den Service hart mit SIGKILL; der laufende Lauf bliebe auf `running` liegen, bis ihn nach 190 s ein anderer Lauf als verwaist übernimmt.
+
+Gemessen mit `docker compose stop service` während eines Laufs (T4):
+
+| Start im Container                        | Stoppen dauert | Lauf danach                   |
+| ----------------------------------------- | -------------- | ----------------------------- |
+| `node dist/main.js` mit `init: true`      | 0.5 s          | `failed`, `aborted: shutdown` |
+| `npm run start:prod` ohne `init` (npm 10.9) | 1.0 s        | `failed`, `aborted: shutdown`, npm meldet `npm error signal SIGTERM` |
+
+Ehrlich festgehalten: Mit npm 10.9 auf `node:22-alpine` kam SIGTERM in diesem Versuch an. Wir verlassen uns trotzdem nicht darauf: Ob npm Signale weiterreicht, hing in der Vergangenheit von der Version ab, über ein `sh -c` dazwischen geht es verloren, npm endet mit einem Fehler-Exit-Code, und es ist ein zusätzlicher Prozess, der nichts beiträgt. Mit Node direkt gibt es keine Abhängigkeit von diesem Verhalten. Zusätzlich `init: true` in Compose: Ein kleines Init (tini) ist PID 1, reicht Signale weiter und räumt Zombie-Prozesse ab. Dasselbe gilt für Mock (`node server.js`) und Migration (`node node_modules/node-pg-migrate/bin/node-pg-migrate.js up`).
 
 **Ports über Variablen (Review-Befund).** Viele Entwickler haben schon eine PostgreSQL auf 5432; ein fester Port liesse `docker compose up` mit «port is already allocated» scheitern. Darum `127.0.0.1:${POSTGRES_PORT:-5432}:5432`, ebenso für die anderen Ports. Im Compose-Netz ändern sich die Ports nie, nur die Weiterleitung nach aussen.
 

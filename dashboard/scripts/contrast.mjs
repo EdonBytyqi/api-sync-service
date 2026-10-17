@@ -14,5 +14,5 @@ for (const [name, t] of Object.entries(themes)) {
     ['Fokusrahmen / Hintergrund', t.focus, t.bg, 3], ['Rahmen / Hintergrund', t.border, t.bg, 3],
   ];
   console.log(`\n${name}`);
-  for (const [label, fg, bg, min] of rows) { const r = ratio(fg, bg); console.log(`${r >= min ? 'OK ' : 'FAIL'} ${r.toFixed(2).padStart(5)}:1 (min ${min}) ${label}  ${fg} on ${bg}`); }
+  for (const [label, fg, bg, min] of rows) { const r = ratio(fg, bg); if (r < min) process.exitCode = 1; console.log(`${r >= min ? 'OK ' : 'FAIL'} ${r.toFixed(2).padStart(5)}:1 (min ${min}) ${label}  ${fg} on ${bg}`); }
 }

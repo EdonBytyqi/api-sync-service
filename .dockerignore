@@ -1,0 +1,18 @@
+# Only what the service image needs (spec 005, AK-2.2).
+.git
+.github
+node_modules
+dist
+coverage
+dashboard
+mock-erp
+specs
+test
+scripts
+**/*.spec.ts
+**/*.db-spec.ts
+**/*.e2e-spec.ts
+*.md
+docker-compose.yml
+vitest.config*.ts
+.env*

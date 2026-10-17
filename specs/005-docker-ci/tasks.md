@@ -1,12 +1,16 @@
 # 005 – Docker und CI: Aufgaben
 
-> Status: Spec zur Review. Noch kein Code. Fasst die offenen CI-Aufgaben aus 001 (T11), 002 (T8) und 003 (T13) zusammen.
+> Status: umgesetzt. Fasst die offenen CI-Aufgaben aus 001 (T11), 002 (T8) und 003 (T13) zusammen. Spec vor dem Code reviewt; Änderungen aus der Review: `CMD` mit Node direkt (Design, mit Messung), Ports über Variablen (AK-3.5).
 
-- [ ] **T1** `GET /health` im Service (`SELECT 1`, 200/503) mit Tests; ERP spielt keine Rolle. → AK-1.1, AK-1.2
-- [ ] **T2** `GET /health` im Mock-ERP vor dem Chaos, mit Test; Spec 001 ergänzen. → AK-1.3
-- [ ] **T3** `Dockerfile` + `.dockerignore` für Service (mehrstufig, `USER node`), Mock-ERP und Dashboard (nginx mit `/api/`-Proxy); `docker build` lokal geprüft, Image-Inhalt geprüft. → AK-2.1–2.3
-- [ ] **T4** `docker-compose.yml` mit `postgres`, `migrate`, `mock-erp`, `service`, `dashboard`; Reihenfolge über Healthchecks, Volume, Ports an `127.0.0.1` über Variablen, `init: true`, `stop_grace_period`, `CMD` mit Node direkt. Lokal: frischer Start, zweiter Start, `docker compose stop` während eines Laufs. → AK-3.1–3.6
-- [ ] **T5** `.github/workflows/ci.yml` mit den sechs Jobs, `concurrency`, `timeout-minutes`. → AK-4.1–4.6
-- [ ] **T6** Smoke-Test-Skript `scripts/smoke.sh` (von CI und lokal nutzbar). → AK-4.2 (Job 6)
+- [x] **T1** `GET /health` im Service (`SELECT 1`, 200/503), Pool mit 3 s Verbindungs-Timeout; Unit-Tests und E2E mit unerreichbarem ERP → 200. → AK-1.1, AK-1.2
+- [x] **T2** `GET /health` im Mock-ERP vor dem Chaos; Test mit `FAILURE_RATE=1`, `SLOW_RATE=1` → 200 ohne Zufall und Pause; Spec 001 AK-1.9. → AK-1.3
+- [x] **T3** `Dockerfile` + `.dockerignore` für Service (mehrstufig), Mock-ERP und Dashboard (nginx). Geprüft: Service und Mock laufen als `uid=1000(node)`; das Service-Image enthält nur `dist/`, `migrations/`, Produktionsabhängigkeiten (45 MB `node_modules`), keine Quellen und Tests. → AK-2.1–2.3
+  - Befund: `proxy_redirect / /api/` machte aus `Location: /sync/runs/7` eine absolute URL mit dem Container-Port (`http://localhost/api/…`). `absolute_redirect off` hält sie relativ. Gefunden vom Smoke-Test.
+- [x] **T4** `docker-compose.yml`. Lokal geprüft: frischer Start mit `--wait` (postgres → migrate beendet → service gesund → dashboard), zweiter Start mit leerer Migration und erhaltenen Daten. → AK-3.1–3.6
+  - Port 8080 war auf diesem Rechner belegt (App A); `DASHBOARD_PORT=8081` genügte, ohne die Datei zu ändern (AK-3.5).
+  - `docker compose stop service` während eines Laufs: 0.5 s, Lauf `failed` mit `aborted: shutdown` (AK-3.6). Gegenprobe mit `npm run start:prod` ohne `init`: SIGTERM kam bei npm 10.9 trotzdem an (1.0 s, gleiches Ergebnis, npm meldet `npm error signal SIGTERM`); im Design ehrlich festgehalten, Entscheidung für Node direkt bleibt.
+- [x] **T5** `.github/workflows/ci.yml`: sechs Jobs, `concurrency` (nur PRs abbrechen), `timeout-minutes: 15`, `permissions: contents: read`, keine Secrets. → AK-4.1–4.6
+- [x] **T6** `scripts/smoke.sh`: Dashboard und Client-Route, `/api/health`, `POST /api/sync` → 202 + `Location: /api/sync/runs/<id>`, Lauf endet `completed` mit 100/100 Seiten und 10'000 Produkten. Lokal grün. → AK-4.2 (Job 6)
 - [ ] **T7** Gegenprobe in einem Branch: einen Test absichtlich rot machen und prüfen, dass genau der betroffene Job rot wird. → AK-4.3
-- [ ] **T8** README: `docker compose up`, Ports, CI-Übersicht, Branch-Protection einrichten. → AK-4.7
+- [x] **T8** README: `docker compose up`, Ports, CI-Übersicht, Branch-Protection. → AK-4.7
+- [ ] **T9** Branch-Protection für `main` im GitHub-Repository einschalten (Einstellung, keine Datei). → AK-4.7

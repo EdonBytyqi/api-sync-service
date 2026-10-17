@@ -22,6 +22,8 @@ Als Sync-Service möchte ich die Produktliste seitenweise abrufen, damit ich den
 - **AK-1.7** Wenn `page` oder `pageSize` keine positive Ganzzahl ist oder `pageSize` grösser als 1000 ist, dann antwortet die API sofort mit 400 und einer Fehlermeldung, ohne Fehler oder Verzögerung zu simulieren.
 - **AK-1.8** Wenn `page` oder `pageSize` nicht in einfacher Dezimalschreibweise angegeben ist (nur Ziffern, ohne Vorzeichen, Exponent, Hex-Präfix, Leerzeichen oder führende Null, z. B. `1e2`, `0x10`, `+5`, ` 5`, `05`), dann gilt AK-1.7 genauso, auch wenn `Number()` daraus eine gültige Zahl macht.
 
+- **AK-1.9** Wenn `GET /health` aufgerufen wird, dann antwortet das Mock immer sofort mit 200 und `{ "status": "ok" }`, ohne simulierte Fehler oder Verzögerung (für Docker-Healthchecks, Spec 005 AK-1.3).
+
 ## Anforderung 2 – Stabile Reihenfolge
 
 Als Sync-Service möchte ich mich auf eine feste Reihenfolge verlassen, damit Seiten sich weder überlappen noch Lücken haben.

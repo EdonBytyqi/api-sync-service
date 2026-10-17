@@ -1,0 +1,160 @@
+# Every push to main and every pull request runs all test suites (spec 005).
+# One job per suite, so a red check names the suite that failed (AK-4.3).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# New commits on a PR cancel its running CI; on main every push finishes (AK-4.4).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  service:
+    name: Service (lint, build, unit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+  mock-erp:
+    name: Mock-ERP
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mock-erp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mock-erp/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  database:
+    name: Database (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # A real PostgreSQL for the length of the job. TEST_DATABASE_URL makes the
+    # tests use it instead of Testcontainers (spec 003, AK-11.1).
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: sync
+          POSTGRES_PASSWORD: sync
+          POSTGRES_DB: sync_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sync -d sync_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://sync:sync@localhost:5432/sync_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run test:db
+
+  e2e:
+    name: End-to-end (service + mock-erp + PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: sync
+          POSTGRES_PASSWORD: sync
+          POSTGRES_DB: sync_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sync -d sync_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://sync:sync@localhost:5432/sync_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mock-erp/package-lock.json
+      - run: npm ci
+      # The e2e tests start the real mock-erp as a child process.
+      - run: npm ci
+        working-directory: mock-erp
+      - run: npm run test:e2e
+
+  dashboard:
+    name: Dashboard (tests incl. axe, contrast, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npx ng test --watch=false
+      - run: node scripts/contrast.mjs
+      - run: npx ng build --configuration production
+
+  docker:
+    name: Docker (compose up + smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [service, mock-erp, database, e2e, dashboard]
+    # Rates 0 make the smoke test deterministic: red means "the system does
+    # not run", not "the mock was unlucky". Retry logic is covered above.
+    env:
+      FAILURE_RATE: '0'
+      SLOW_RATE: '0'
+      RATE_LIMIT_RATE: '0'
+      SYNC_SCHEDULE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
+      - run: docker compose up -d --wait --wait-timeout 180
+      - run: bash scripts/smoke.sh
+      - name: Compose logs
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
