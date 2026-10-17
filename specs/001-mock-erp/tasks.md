@@ -19,3 +19,5 @@
   - Gegenprobe: drei absichtlich eingebaute Fehler (überlappende Raten, Chaos vor Validierung, keine Konfig-Prüfung) lassen jeweils Tests fehlschlagen.
 - [x] **T8** README: Start, Tests, Umgebungsvariablen und Validierung dokumentieren.
 - [ ] **T9** AK-6.5 (Startmeldung) automatisch testen. Bisher nur manuell geprüft.
+- [x] **T10** `mock-erp/**` in `vitest.config.ts` und `vitest.config.e2e.ts` im Root ausschliessen, mit `...configDefaults.exclude`.
+- [ ] **T11** CI mit zwei Schritten: `npm test` im Root, `npm test` in `mock-erp/`. (Kommt mit der CI-Spec.)

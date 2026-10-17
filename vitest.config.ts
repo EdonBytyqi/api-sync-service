@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Resolves the path aliases declared in tsconfig.json, including the ones
@@ -8,5 +8,8 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    // mock-erp is a separate package with its own tests (npm test in mock-erp/).
+    // Spread the defaults: a custom exclude replaces them, node_modules included.
+    exclude: [...configDefaults.exclude, 'mock-erp/**'],
   },
 });

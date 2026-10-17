@@ -14,6 +14,16 @@ api-sync-service ──HTTP──▶ mock-erp :4000  GET /products?page&pageSize
 | `app.js`    | `generateProducts()`, `rollChaos(config, random)`, `createApp(config, deps)` |
 | `server.js` | Einstiegspunkt: Konfiguration laden, bei Fehler Exit-Code 1, sonst `listen` |
 
+### Abgrenzung zum Root-Projekt
+
+`mock-erp/` ist wie ein externes System vollständig eigenständig:
+
+- Eigene Abhängigkeiten (`express`, `vitest`, `supertest`) und eigenes `npm test` in `mock-erp/package.json`.
+- Tests heissen `*.test.js` (JavaScript wie der Server), das Root-Muster `**/*.spec.ts` trifft sie nie.
+- Beide Root-Configs (`vitest.config.ts`, `vitest.config.e2e.ts`) schliessen `mock-erp/**` zusätzlich explizit aus. Dabei werden `configDefaults.exclude` gespreizt, weil ein eigenes `exclude` die Standardwerte ersetzt und sonst `node_modules` durchsucht würde.
+- `mock-erp/vitest.config.js` ist nötig, nicht nur Dokumentation: Ohne sie hat Vitest in `mock-erp/` die Root-Config im Elternordner gefunden und nur `*.spec.ts` gesucht («No test files found»).
+- CI später in zwei Schritten: `npm test` im Root und `npm test` in `mock-erp/`.
+
 ## Datenmodell
 
 Beim Start werden 10'000 Produkte im Speicher erzeugt, ohne Zufall:
