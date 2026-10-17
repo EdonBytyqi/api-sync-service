@@ -58,5 +58,5 @@ Als Entwickler möchte ich das Verhalten über Umgebungsvariablen steuern, damit
 - **AK-6.1** Wenn keine Umgebungsvariablen gesetzt sind, dann gelten `FAILURE_RATE=0.2`, `SLOW_RATE=0.1`, `RATE_LIMIT_RATE=0.05`, `SLOW_MS=5000` und `PORT=4000`.
 - **AK-6.2** Wenn `FAILURE_RATE`, `SLOW_RATE` und `RATE_LIMIT_RATE` auf 0 gesetzt sind, dann antwortet jede gültige Anfrage mit 200 in weniger als 100 ms.
 - **AK-6.3** Wenn eine Rate auf 1 gesetzt ist, dann tritt das entsprechende Verhalten bei jeder gültigen Anfrage ein.
-- **AK-6.4** Wenn eine Rate keine Zahl zwischen 0 und 1 ist (z. B. `FAILURE_RATE=abc` oder `1.5`) oder `FAILURE_RATE + RATE_LIMIT_RATE` grösser als 1 ist, dann startet der Server nicht und nennt die ungültige Variable.
+- **AK-6.4** Wenn eine Rate keine Zahl zwischen 0 und 1 ist (z. B. `FAILURE_RATE=abc` oder `1.5`), `SLOW_MS` keine nicht-negative Ganzzahl ist, `PORT` keine Ganzzahl zwischen 1 und 65535 ist oder `FAILURE_RATE + RATE_LIMIT_RATE` grösser als 1 ist, dann startet der Server nicht, endet mit Exit-Code 1 und nennt jede ungültige Variable.
 - **AK-6.5** Wenn der Server startet, dann gibt er Port und aktive Raten auf der Konsole aus.

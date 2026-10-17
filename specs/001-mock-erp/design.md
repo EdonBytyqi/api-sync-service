@@ -2,11 +2,17 @@
 
 ## Überblick
 
-Ein einzelner Express-Server in `mock-erp/server.js` mit eigenem `package.json`. Er teilt keinen Code und keine Abhängigkeiten mit dem NestJS-Service, damit der Sync-Service ihn nur über HTTP kennt, so wie ein echtes ERP.
+Ein kleiner Express-Server in `mock-erp/` mit eigenem `package.json`. Er teilt keinen Code und keine Abhängigkeiten mit dem NestJS-Service, damit der Sync-Service ihn nur über HTTP kennt, so wie ein echtes ERP.
 
 ```
 api-sync-service ──HTTP──▶ mock-erp :4000  GET /products?page&pageSize
 ```
+
+| Datei       | Aufgabe                                                                    |
+| ----------- | -------------------------------------------------------------------------- |
+| `config.js` | `loadConfig(env)`: Umgebungsvariablen lesen, validieren, Objekt zurückgeben |
+| `app.js`    | `generateProducts()`, `rollChaos(config, random)`, `createApp(config, deps)` |
+| `server.js` | Einstiegspunkt: Konfiguration laden, bei Fehler Exit-Code 1, sonst `listen` |
 
 ## Datenmodell
 
@@ -24,12 +30,14 @@ Die Liste ist nach `id` sortiert. Eine Seite ist `products.slice((page - 1) * pa
 
 ## Ablauf einer Anfrage
 
-1. `page` und `pageSize` validieren → bei Fehler sofort 400 (AK-1.7).
-2. Mit Wahrscheinlichkeit `SLOW_RATE` `SLOW_MS` warten (AK-4.1).
-3. Eine Zufallszahl `r` in [0, 1) ziehen:
-   - `r < RATE_LIMIT_RATE` → 429 mit `Retry-After: 2`
-   - `r < RATE_LIMIT_RATE + FAILURE_RATE` → 500
-   - sonst → 200 mit der Seite
+1. `page` und `pageSize` validieren → bei Fehler sofort 400, ohne `random` oder `sleep` aufzurufen (AK-1.7).
+2. `rollChaos(config, random)` zieht genau zwei Werte aus `random`:
+   - 1. Wert `< SLOW_RATE` → langsam
+   - 2. Wert `r`: `r < RATE_LIMIT_RATE` → 429, `r < RATE_LIMIT_RATE + FAILURE_RATE` → 500, sonst 200
+3. Wenn langsam: `await sleep(SLOW_MS)` (AK-4.1).
+4. Antwort mit dem ausgewürfelten Status, bei 429 mit `Retry-After: 2`.
+
+`rollChaos` ist eine reine Funktion ohne HTTP und ohne Zeit. Sie enthält die ganze Raten-Logik.
 
 ## Entscheidungen
 
@@ -43,4 +51,8 @@ Die Liste ist nach `id` sortiert. Eine Seite ist `products.slice((page - 1) * pa
 
 **Validierung vor dem Chaos.** Ein 400 ist ein Fehler des Aufrufers und soll nie zufällig als 500 erscheinen. Sonst würde der Sync-Service einen Programmierfehler endlos wiederholen.
 
-**Ungültige Konfiguration bricht den Start ab.** `Number("abc")` ergibt `NaN`, und `Math.random() < NaN` ist immer `false`. Ein Tippfehler würde die Fehler also still abschalten, und Tests wären grün, ohne etwas zu prüfen. Deshalb validieren wir beim Start (AK-6.4).
+**Ungültige Konfiguration bricht den Start ab.** `Number("abc")` ergibt `NaN`, und `Math.random() < NaN` ist immer `false`. Ein Tippfehler würde die Fehler also still abschalten, und Tests wären grün, ohne etwas zu prüfen. Deshalb validiert `loadConfig` beim Start alle Variablen, meldet alle Fehler auf einmal, und `server.js` beendet sich mit Exit-Code 1 (AK-6.4).
+
+**Zufall und Zeit werden injiziert.** `createApp(config, { random, sleep })` nimmt die Zufallsquelle und die Warte-Funktion als Parameter; Standard sind `Math.random` und `setTimeout`. Ein Test übergibt eine feste Folge, z. B. `sequence(0.99, 0.01)` für «nicht langsam, 429», und eine `sleep`-Attrappe, die sofort zurückkehrt und ihren Aufruf aufzeichnet. So entscheidet der Test, was eine einzelne Anfrage tut, ohne 1'000 Anfragen zu senden und ohne 5 Sekunden zu warten. Die Raten (AK-3.2, 4.3, 5.2) werden geprüft, indem 1'000 gleichmässig verteilte Werte `(i + 0.5) / 1000` durch `rollChaos` laufen. Das Ergebnis ist exakt (z. B. genau 200 × 500), statt eines Toleranzbands, das gelegentlich zufällig fehlschlägt. Nur ein Test nutzt echtes `Math.random`, um die Verdrahtung zu prüfen; seine Toleranz liegt bei über 10 Standardabweichungen.
+
+**Der Vertrag mit `random` ist Teil des Designs.** Tests verlassen sich darauf, dass pro Anfrage genau zwei Werte gezogen werden, zuerst Verzögerung, dann Status. Die `sequence`-Attrappe wirft, wenn mehr gezogen wird. Ändert sich die Reihenfolge, schlagen die Tests deshalb laut fehl statt still Falsches zu prüfen.
