@@ -14,7 +14,7 @@ Eine kleine Angular-Oberfläche für den Betrieb: Sie zeigt die letzten Sync-Lä
 
 - **AK-1.1** Wenn das Dashboard geladen wird, dann zeigt es die 20 neuesten Läufe aus `GET /sync/runs?limit=20` als Tabelle, neueste zuerst.
 - **AK-1.2** Wenn ein Lauf angezeigt wird, dann zeigt seine Zeile: Nummer, Auslöser (`Zeitplan`/`Manuell`), Status, Start (Datum und Uhrzeit in Europe/Zurich), Dauer, Seiten `ok / total`, und die Zähler `neu`, `geändert`, `unverändert`, `reaktiviert`, `deaktiviert`.
-- **AK-1.3** Wenn Zahlen angezeigt werden, dann im Schweizer Format (`10’000`).
+- **AK-1.3** Wenn Zahlen angezeigt werden, dann im Schweizer Format mit Apostroph als Tausendertrennzeichen, so wie `Intl.NumberFormat('de-CH')` es liefert. Ob das ein gerades (`10'000`) oder typografisches Apostroph (`10’000`) ist, hängt von der ICU-Version ab (Node 22 liefert das gerade); Tests vergleichen deshalb mit `Intl`, nicht mit einem festen Zeichen.
 - **AK-1.4** Wenn ein Lauf noch `running` ist, dann zeigt er statt der Dauer «läuft seit …» und einen Fortschrittsbalken `pagesOk / pagesTotal`; ist `pagesTotal` noch unbekannt, dann «wird vorbereitet».
 - **AK-1.5** Wenn noch kein Lauf existiert, dann zeigt das Dashboard «Noch keine Läufe» statt einer leeren Tabelle.
 - **AK-1.6** Wenn die API nicht erreichbar ist oder einen Fehler liefert, dann zeigt das Dashboard eine Fehlermeldung mit «Erneut versuchen»; bereits angezeigte Läufe bleiben stehen und sind als «Stand: <Uhrzeit>» gekennzeichnet.

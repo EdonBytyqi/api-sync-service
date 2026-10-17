@@ -49,7 +49,7 @@ Symbole sind `aria-hidden="true"`; der Text trägt die Bedeutung (AK-2.1).
 
 **Aufklappen per `<button>` in der ersten Zelle.** Ein klickbares `<tr>` ist für Tastatur und Screenreader unsichtbar. Der Button sitzt in der Nummernspalte («Details zu Lauf #12»), die Details folgen als eigene Zeile mit `id` für `aria-controls`.
 
-**Formatierung als reine Funktionen mit `Intl`.** `Intl.NumberFormat('de-CH')` liefert `10’000`, `Intl.DateTimeFormat('de-CH', { timeZone: 'Europe/Zurich' })` die Zeit unabhängig von der Zeitzone des Rechners. Rein und ohne Angular testbar.
+**Formatierung als reine Funktionen mit `Intl`.** `Intl.NumberFormat('de-CH')` liefert `10'000` (je nach ICU-Version mit geradem oder typografischem Apostroph), `Intl.DateTimeFormat('de-CH', { timeZone: 'Europe/Zurich' })` die Zeit unabhängig von der Zeitzone des Rechners. Rein und ohne Angular testbar.
 
 **Dauer und «läuft seit» aus Server-Zeiten.** Für beendete Läufe `finishedAt − startedAt`, beides vom Server. Für laufende Läufe `jetzt − startedAt` mit der Uhr des Browsers; eine kleine Abweichung ist hier unwichtig und wird nicht korrigiert.
 
