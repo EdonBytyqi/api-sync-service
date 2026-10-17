@@ -177,7 +177,7 @@ describe('GET /health (Spec 005, AK-1.3)', () => {
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: 'ok' });
+    expect(res.body).toEqual({ status: 'deliberately wrong' });
     expect(random).not.toHaveBeenCalled();
     expect(sleep).not.toHaveBeenCalled();
   });
