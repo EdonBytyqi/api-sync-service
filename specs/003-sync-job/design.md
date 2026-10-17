@@ -87,6 +87,7 @@ run(runId, signal):
   Seite 1 holen (bei retrybarem Fehler: retryAfterMs warten, einmal neu) → sonst failed
   pages_total = ceil(total / pageSize) speichern
   erster Durchgang, Seiten 1 … n nacheinander:
+    heartbeat()   ── vor JEDEM fetchPage, auch nach einem Fehler (AK-7.3)
     ok      → savePage (Transaktion, siehe unten); consecutive = 0
     ErpError→ failed_pages merken; consecutive++ ; ≥ SYNC_MAX_CONSECUTIVE_FAILURES → failed
   zweiter Durchgang für retrybare, nicht rateLimited Seiten:
@@ -100,7 +101,7 @@ run(runId, signal):
 
 1. `UPDATE sync_runs SET heartbeat_at = now() WHERE id = $run AND status = 'running'` → 0 Zeilen: Fencing, `ROLLBACK`, Lauf bricht ab (AK-7.5).
 2. `SELECT … FROM products WHERE external_id = ANY($ids) FOR UPDATE`
-3. `diffPage(vorhanden, neu)` (rein) → welche einfügen, ändern, reaktivieren, unverändert.
+3. `diffPage(vorhanden, neu)` (rein) → entfernt zuerst doppelte `external_id` innerhalb der Seite (letzte gewinnt, AK-3.9), dann: welche einfügen, ändern, reaktivieren, unverändert.
 4. Einfügen/Ändern mit `INSERT … ON CONFLICT (external_id) DO UPDATE` für neue und geänderte Produkte (ein Statement mit `unnest`).
 5. `UPDATE products SET last_seen_run_id = $run, last_seen_at = now() WHERE external_id = ANY($ids)` für alle.
 6. Zähler in `sync_runs` erhöhen.
@@ -143,7 +144,7 @@ Ein dritter Durchgang brächte kaum mehr. Was übrig bleibt, holt der nächste L
 
 **Sperre über einen Partial Unique Index, nicht über `pg_advisory_lock`.** Der Index erzwingt «höchstens ein `running`» für alle Instanzen, in derselben Transaktion wie das Anlegen des Laufs, und ist in der Tabelle sichtbar. Ein Advisory Lock würde bei einem Absturz zwar automatisch frei, bräuchte aber eine Datenbankverbindung, die über die ganze Laufzeit offen bleibt, und funktioniert nicht hinter einem Connection-Pooler im Transaktionsmodus (z. B. PgBouncer).
 
-**Verwaisung über Heartbeat und `maxDurationMs`.** Ein abgestürzter Prozess hinterlässt eine Zeile auf `running`, die sonst jeden weiteren Lauf blockieren würde. Zwischen zwei Heartbeats liegt höchstens ein `fetchPage` (≤ `maxDurationMs` = 130 s, Spec 002 AK-10) oder die Pause vor dem zweiten Durchgang (≤ `maxRetryAfterMs` = 30 s, mit Heartbeat davor). Ist der Heartbeat älter als 130 s + 60 s Reserve, lebt der Lauf nicht mehr. Eine Grenze für die *ganze* Laufzeit wäre unbrauchbar: Sie müsste Stunden betragen und würde einen Absturz erst nach Stunden erkennen.
+**Verwaisung über Heartbeat und `maxDurationMs`.** Ein abgestürzter Prozess hinterlässt eine Zeile auf `running`, die sonst jeden weiteren Lauf blockieren würde. Der Heartbeat läuft **vor jedem `fetchPage`**, nicht nur beim Speichern. Nur so gilt: Zwischen zwei Heartbeats liegt höchstens ein `fetchPage` (≤ `maxDurationMs` = 130 s, Spec 002 AK-10) plus das Speichern, oder eine Pause (≤ `maxRetryAfterMs` = 30 s, mit Heartbeat davor). Ein Heartbeat nur in `savePage` wäre falsch gewesen (Review-Befund): Scheitern die Seiten 13 und 14 nach je 130 s, wäre 260 s lang kein Heartbeat gekommen, mehr als die 190 s Grenze, und ein gesunder Lauf wäre für verwaist erklärt worden. Das Fencing hätte die Daten zwar geschützt, aber der Lauf wäre grundlos abgebrochen. Ist der Heartbeat älter als 130 s + 60 s Reserve, lebt der Lauf nicht mehr. Eine Grenze für die *ganze* Laufzeit wäre unbrauchbar: Sie müsste Stunden betragen und würde einen Absturz erst nach Stunden erkennen.
 
 **Fencing.** Ein Lauf kann fälschlich für verwaist erklärt werden, z. B. nach einer langen GC-Pause oder einer Netzwerkunterbrechung. Damit dann nicht zwei Läufe schreiben, prüft jede Seiten-Transaktion zuerst `WHERE id = $run AND status = 'running'`. Ist die Zeile nicht mehr `running`, wird nichts geschrieben und der Lauf hört auf.
 
@@ -159,6 +160,8 @@ Ein dritter Durchgang brächte kaum mehr. Was übrig bleibt, holt der nächste L
 
 **`price_cents integer CHECK (>= 0)`.** Wie im Client (Spec 002): Ganzzahlen in Rappen, Gratisartikel erlaubt. `integer` reicht bis 21 Mio. CHF pro Artikel.
 
+**Doppelte IDs innerhalb einer Seite entfernt `diffPage`.** PostgreSQL lehnt ein `INSERT … ON CONFLICT DO UPDATE` ab, das dieselbe Zeile zweimal ändern würde («command cannot affect row a second time»). Das Mock liefert nie Duplikate, ein echtes ERP vielleicht schon (z. B. bei Verschiebungen während des Lesens). Die letzte gewinnt, wie zwischen Seiten (AK-3.7), damit die Regel überall dieselbe ist.
+
 **Diff in TypeScript, nicht in SQL.** Zu zählen, ob ein Upsert eingefügt, geändert oder nichts getan hat, geht in SQL nur mit Tricks (`xmax = 0`) oder ab PostgreSQL 18 mit `RETURNING OLD`. Stattdessen liest die Transaktion die vorhandenen Zeilen `FOR UPDATE`, und die reine Funktion `diffPage` entscheidet. Das ist für 100 Zeilen pro Seite billig, und die Regeln aus Anforderung 3 werden ohne Datenbank testbar.
 
 **`pg` mit SQL, kein ORM.** Die wichtigen Teile sind SQL-Merkmale: Partial Unique Index, `ON CONFLICT`, `FOR UPDATE`, `unnest`, `now()`. Ein ORM würde sie verstecken oder umgehen. Migrationen sind reine SQL-Dateien mit `node-pg-migrate`; die App selbst migriert nicht, damit mehrere Instanzen beim Start nicht gleichzeitig migrieren.
@@ -169,6 +172,10 @@ Ein dritter Durchgang brächte kaum mehr. Was übrig bleibt, holt der nächste L
 
 - **Reine Funktionen** (`diffPage`, `decideStatus`, Konfiguration) mit Unit-Tests ohne Datenbank.
 - **`SyncRunner`** bekommt eine `ProductSource` (Interface mit `fetchPage`, im Betrieb der `ErpClient`) und `sleep` injiziert. Tests spielen Seitenfolgen mit Fehlern ab, ohne HTTP und ohne Wartezeit.
-- **Echte PostgreSQL in Tests** über Testcontainers (`@testcontainers/postgresql`, Docker ist vorhanden), Migration vor den Tests. Nebenläufigkeit, Partial Unique Index, Fencing und `FOR UPDATE` lassen sich mit einer Attrappe nicht glaubwürdig prüfen.
+- **Echte PostgreSQL in Tests.** Nebenläufigkeit, Partial Unique Index, Fencing und `FOR UPDATE` lassen sich mit einer Attrappe nicht glaubwürdig prüfen. Woher die Datenbank kommt, entscheidet ein Vitest-`globalSetup`:
+  - `TEST_DATABASE_URL` gesetzt → diese Datenbank (CI-Service-Container, Cloud-Umgebung ohne Docker, lokale PostgreSQL). Schneller und ohne Docker.
+  - sonst → ein PostgreSQL-17-Container über Testcontainers, einmal für alle Testdateien.
+- **Ein Schema pro Testdatei.** Jede Datei legt `CREATE SCHEMA test_<zufall>` an, migriert hinein, verbindet sich mit `search_path` auf dieses Schema und löscht es am Ende. So laufen Dateien parallel gegen dieselbe Datenbank, ohne sich die Tabellen zu teilen, und eine bestehende Datenbank wird nicht verschmutzt.
+- **`npm test` bleibt ohne Datenbank.** Datenbank-Tests heissen `*.db-spec.ts` und laufen mit `npm run test:db`; Ende-zu-Ende-Tests mit `npm run test:e2e` nutzen dasselbe `globalSetup`.
 - **Verwaisung** wird getestet, indem der Test `heartbeat_at` in der Datenbank auf «vor 10 Minuten» setzt.
 - **Ende-zu-Ende** gegen das echte Mock-ERP (Kindprozess wie in Spec 002) und die Test-Datenbank.

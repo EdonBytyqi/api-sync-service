@@ -41,7 +41,8 @@ Der Sync-Job holt den ganzen Produktkatalog seitenweise mit dem ERP-Client (Spec
 - **AK-3.4** Wenn ein deaktiviertes Produkt wieder kommt, dann wird es mit `active = true` und `deactivated_at = NULL` reaktiviert und als `reactivated` gezählt (zusätzlich zu `updated`, falls sich Daten geändert haben).
 - **AK-3.5** Wenn eine Seite gespeichert wird, dann geschieht das in **einer Transaktion**: Entweder alle Produkte der Seite sind gespeichert oder keines.
 - **AK-3.6** Wenn ein Lauf mit unveränderten ERP-Daten wiederholt wird, dann zählt er 0 `inserted`, 0 `updated` und 10'000 `unchanged`.
-- **AK-3.7** Wenn dieselbe `external_id` in einem Lauf zweimal vorkommt (z. B. durch Verschiebung, AK-2.4), dann gewinnt das zuletzt gelesene Produkt, ohne Fehler.
+- **AK-3.7** Wenn dieselbe `external_id` in einem Lauf auf zwei verschiedenen Seiten vorkommt (z. B. durch Verschiebung, AK-2.4), dann gewinnt das zuletzt gelesene Produkt, ohne Fehler.
+- **AK-3.9** Wenn dieselbe `external_id` **innerhalb einer Seite** mehrfach vorkommt, dann wird nur das letzte Vorkommen gespeichert, ohne Datenbankfehler, und gezählt wird jedes Produkt einmal. Grund: Ein `INSERT … ON CONFLICT DO UPDATE` mit derselben ID zweimal scheitert in PostgreSQL mit «command cannot affect row a second time», und der Lauf würde nach AK-3.8 `failed`. Die doppelte ID wird als Warnung geloggt.
 - **AK-3.8** Wenn die Datenbank beim Speichern einer Seite einen Fehler meldet, dann endet der Lauf sofort mit `failed`. Ein Datenbankfehler ist kein Fehler einer einzelnen Seite.
 
 ## Anforderung 4 – Protokoll in `sync_runs`
@@ -78,9 +79,10 @@ Mit den Mock-Standardraten hat ohne Gegenmassnahme rund 30 % der Läufe mindeste
 
 - **AK-7.1** Wenn ein Lauf starten soll, während ein anderer `running` und nicht verwaist ist, dann startet kein neuer Lauf: manuell → 409 (AK-8.3), per Zeitplan → übersprungen und als Info geloggt.
 - **AK-7.2** Wenn mehrere Instanzen des Service gleichzeitig einen Lauf starten wollen, dann gewinnt genau eine. Die Datenbank erzwingt höchstens eine Zeile mit `status = 'running'`.
-- **AK-7.3** Wenn ein Lauf eine Seite speichert und bevor er wartet (zweiter Durchgang), dann setzt er `heartbeat_at = now()`.
+- **AK-7.3** Wenn ein Lauf eine Seite abrufen will, dann setzt er **vor jedem** `fetchPage` `heartbeat_at = now()`, egal ob die vorherige Seite gelungen oder gescheitert ist. Ebenso vor jeder Pause (Wiederholung von Seite 1, zweiter Durchgang) und beim Speichern einer Seite. Zwischen zwei Heartbeats liegt damit höchstens ein `fetchPage` oder eine Pause.
+- **AK-7.3a** Wenn mehrere Seiten nacheinander scheitern und jede bis zu `maxDurationMs` dauert, dann wird der Lauf trotzdem nie für verwaist erklärt, solange er lebt.
 - **AK-7.4** Wenn ein Lauf starten soll und ein `running`-Lauf seit mehr als `staleAfterMs` keinen Heartbeat hatte, dann markiert der neue Lauf ihn als `failed` mit `finished_at` und `error = 'abandoned: no heartbeat since <Zeit>'` und startet danach. `staleAfterMs = ErpClient.maxDurationMs(erpConfig) + SYNC_STALE_MARGIN_MS` (Standard 130 s + 60 s = 190 s).
-- **AK-7.5** Wenn ein Lauf beim Heartbeat feststellt, dass seine Zeile nicht mehr `running` ist (er wurde für verwaist erklärt), dann bricht er sofort ab, ohne die Seite zu speichern und ohne seine Zeile zu ändern (Fencing).
+- **AK-7.5** Wenn ein Lauf beim Heartbeat feststellt, dass seine Zeile nicht mehr `running` ist (er wurde für verwaist erklärt), dann bricht er sofort ab, ohne weitere Seiten abzurufen oder zu speichern und ohne seine Zeile zu ändern (Fencing).
 - **AK-7.6** Alle Zeitvergleiche für Heartbeat und Verwaisung nutzen die Uhr der Datenbank (`now()`), nicht die der App.
 
 ## Anforderung 8 – Auslöser
@@ -99,3 +101,10 @@ Mit den Mock-Standardraten hat ohne Gegenmassnahme rund 30 % der Läufe mindeste
 
 - **AK-10.1** Wenn ein Lauf gegen das Mock-ERP mit allen Raten 0 läuft, dann endet er `completed` mit 100 Seiten, 10'000 `inserted` und 0 `deactivated`; ein zweiter Lauf zählt 10'000 `unchanged`.
 - **AK-10.2** Wenn ein Lauf gegen das Mock-ERP mit den Standardraten läuft, dann endet er `completed` oder `partial`, und alle erfolgreich gelesenen Seiten sind gespeichert.
+
+## Anforderung 11 – Datenbank-Tests überall ausführbar
+
+- **AK-11.1** Wenn `TEST_DATABASE_URL` gesetzt ist, dann laufen die Datenbank-Tests gegen diese PostgreSQL (z. B. ein Service-Container in CI oder eine Cloud-Umgebung ohne Docker) und starten keinen Container.
+- **AK-11.2** Wenn `TEST_DATABASE_URL` nicht gesetzt ist, dann starten die Tests eine PostgreSQL mit Testcontainers (Docker nötig).
+- **AK-11.3** Wenn mehrere Testdateien parallel gegen dieselbe Datenbank laufen, dann stören sie sich nicht: Jede Datei arbeitet in einem eigenen, frisch migrierten Schema und löscht es am Ende.
+- **AK-11.4** Wenn `npm test` läuft, dann braucht es weder Docker noch eine Datenbank; Datenbank-Tests laufen getrennt mit `npm run test:db`.
