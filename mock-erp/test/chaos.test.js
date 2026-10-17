@@ -167,3 +167,18 @@ describe('Anforderung 6 – Konfiguration (Verhalten)', () => {
     expect(counts.slow / n).toBeCloseTo(0.1, 1);
   });
 });
+
+describe('GET /health (Spec 005, AK-1.3)', () => {
+  it('antwortet immer sofort mit 200, auch wenn jede Produkt-Anfrage scheitern würde', async () => {
+    const random = sequence(); // throws if drawn at all
+    const sleep = noSleep();
+    const app = createApp(stableConfig({ failureRate: 1, slowRate: 1 }), { random, sleep });
+
+    const res = await request(app).get('/health');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: 'ok' });
+    expect(random).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+});

@@ -93,6 +93,26 @@ describe('SyncRunsRepository.start', () => {
     }
   });
 
+  it('AK-7.2 endet der Gewinner zwischen 23505 und dem Nachlesen, versucht start es einmal neu', async () => {
+    const winner = await startOk();
+    // Simulate the race: the winner finishes right after our INSERT failed.
+    const realFindRunning = runs.findRunning.bind(runs);
+    const spy = vi
+      .spyOn(runs, 'findRunning')
+      .mockImplementationOnce(async () => {
+        await runs.finish(winner.id, { status: 'completed', failedPages: [] });
+        return realFindRunning(); // null: nothing runs any more
+      });
+    try {
+      const result = await runs.start('manual', 100, STALE_MS);
+
+      expect(result).toMatchObject({ started: true });
+      expect(result.started && result.run.id).toBeGreaterThan(winner.id);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('AK-7.1 nach dem Abschluss eines Laufs startet der nächste', async () => {
     const first = await startOk();
     await runs.finish(first.id, { status: 'completed', failedPages: [] });

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Database } from '../db/database.js';
+import { HealthController } from '../health/health.controller.js';
 import { abortableSleep, ErpClient } from '../erp/erp-client.js';
 import type { ErpConfig } from '../erp/erp-config.js';
 import { ERP_CONFIG, ErpModule } from '../erp/erp.module.js';
@@ -34,7 +35,7 @@ class SyncShutdown implements BeforeApplicationShutdown {
 
 @Module({
   imports: [ErpModule, ScheduleModule.forRoot()],
-  controllers: [SyncController],
+  controllers: [SyncController, HealthController],
   providers: [
     {
       provide: SYNC_CONFIG,

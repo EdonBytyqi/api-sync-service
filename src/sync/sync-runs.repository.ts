@@ -118,6 +118,18 @@ export class SyncRunsRepository {
     pageSize: number,
     staleAfterMs: number,
   ): Promise<StartResult> {
+    const result = await this.tryStart(trigger, pageSize, staleAfterMs);
+    if (result.started || result.runningRunId !== null) return result;
+    // The winner finished between our failed INSERT and the lookup: nothing
+    // runs any more, so try once more instead of answering 409 with null.
+    return this.tryStart(trigger, pageSize, staleAfterMs);
+  }
+
+  private async tryStart(
+    trigger: SyncTrigger,
+    pageSize: number,
+    staleAfterMs: number,
+  ): Promise<StartResult> {
     try {
       return await withTransaction(this.pool, async (client) => {
         const abandoned = await client.query<{ id: string }>(

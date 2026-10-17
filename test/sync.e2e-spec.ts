@@ -183,6 +183,14 @@ describe('Sync-Job gegen Mock-ERP und PostgreSQL', () => {
     expect(rows[0].finished_at).not.toBeNull();
   });
 
+  it('Spec 005 AK-1.1 / AK-1.2 GET /health ist 200, auch wenn das ERP nicht erreichbar ist', async () => {
+    const http = await startApp({}, { ERP_BASE_URL: 'http://127.0.0.1:1' });
+
+    const res = await http.get('/health').expect(200);
+
+    expect(res.body).toEqual({ status: 'ok', database: 'up' });
+  });
+
   it('AK-9.2 ungültige Konfiguration: der Service startet nicht', async () => {
     await expect(startApp({}, { SYNC_PAGE_SIZE: '0' })).rejects.toThrow(
       'SYNC_PAGE_SIZE="0"',

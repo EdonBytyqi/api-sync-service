@@ -46,6 +46,9 @@ export function createApp(config, { random = Math.random, sleep = defaultSleep }
   const products = generateProducts();
   const app = express();
 
+  // Before any chaos: Docker health checks must not fail at random (spec 005, AK-1.3).
+  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
   app.get('/products', async (req, res) => {
     const page = parsePositiveInt(req.query.page, 1);
     const pageSize = parsePositiveInt(req.query.pageSize, 100);
