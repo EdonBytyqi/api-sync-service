@@ -31,6 +31,10 @@ export async function migrate(url: string, schema: string): Promise<void> {
     migrationsTable: 'pgmigrations',
     schema,
     createSchema: true,
+    // The advisory lock is database-wide and would serialise (and fail)
+    // parallel test files, though each migrates its own schema and table.
+    // `npm run migrate` keeps the lock: it guards concurrent deploys.
+    noLock: true,
     log: () => {},
   });
 }
