@@ -27,11 +27,13 @@ Eine kleine Angular-Oberfläche für den Betrieb: Sie zeigt die letzten Sync-Lä
 
 ## Anforderung 3 – «Jetzt synchronisieren»
 
-- **AK-3.1** Wenn der Knopf gedrückt wird, dann sendet das Dashboard `POST /sync`, und der Knopf ist bis zur Antwort deaktiviert und zeigt «Wird gestartet …».
+- **AK-3.1** Wenn der Knopf gedrückt wird, dann sendet das Dashboard `POST /sync`, und der Knopf ist bis zur Antwort gesperrt und zeigt «Wird gestartet …». Gesperrt heisst `aria-disabled="true"` mit einer Klick-Sperre im Code, **nicht** das HTML-Attribut `disabled` (siehe AK-3.6).
 - **AK-3.2** Wenn die Antwort 202 ist, dann meldet das Dashboard «Lauf #<id> gestartet», lädt die Liste sofort neu und zeigt den neuen Lauf oben.
 - **AK-3.3** Wenn die Antwort 409 ist, dann meldet das Dashboard «Lauf #<runningRunId> läuft bereits» und hebt diesen Lauf hervor. Das ist kein Fehler, sondern ein normaler Zustand.
 - **AK-3.4** Wenn die Antwort ein anderer Fehler ist oder das Netzwerk fehlt, dann meldet das Dashboard «Lauf konnte nicht gestartet werden» mit dem Grund, und der Knopf ist wieder aktiv.
-- **AK-3.5** Wenn laut Liste ein Lauf `running` ist, dann ist der Knopf deaktiviert, mit sichtbarem Grund («Lauf #<id> läuft»). Die API bleibt trotzdem die Quelle der Wahrheit (AK-3.3), weil ein anderer Nutzer oder der Zeitplan gleichzeitig starten kann.
+- **AK-3.5** Wenn laut Liste ein Lauf `running` ist, dann ist der Knopf gesperrt wie in AK-3.1 (`aria-disabled`, Klick ohne Wirkung), mit sichtbarem Grund («Lauf #<id> läuft»). Die API bleibt trotzdem die Quelle der Wahrheit (AK-3.3), weil ein anderer Nutzer oder der Zeitplan gleichzeitig starten kann.
+
+- **AK-3.6** Wenn ein Tastatur-Nutzer den Knopf auslöst, dann bleibt der Fokus während und nach der Anfrage auf dem Knopf, auch wenn er gesperrt und später wieder frei wird. Ein gesperrter Knopf bleibt per Tab erreichbar und wird vom Screenreader als «nicht verfügbar» mit seinem Grund vorgelesen.
 
 ## Anforderung 4 – Aktualisierung
 

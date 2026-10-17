@@ -108,6 +108,19 @@ run(runId, signal):
 
 `deactivate(runId)` in einer Transaktion: Fencing wie oben, Kandidaten und aktive Produkte zählen, bei Anteil ≤ `SYNC_MAX_DEACTIVATE_RATIO` deaktivieren, sonst nichts tun und `partial` melden.
 
+## Zwei Instanzen, gleichzeitig `POST /sync`
+
+Was genau passiert, wenn Instanz A und Instanz B im selben Moment einen Lauf starten wollen (AK-7.2):
+
+1. Beide öffnen in `SyncRunsRepository.start` eine eigene Transaktion auf einer eigenen Verbindung.
+2. Beide markieren verwaiste Läufe (`UPDATE … WHERE status = 'running' AND heartbeat_at < …`). Normalerweise gibt es keinen. Gibt es einen, sperrt der Erste die Zeile; der Zweite wartet auf die Sperre, prüft danach die `WHERE`-Bedingung neu und findet die Zeile nicht mehr auf `running`.
+3. Beide führen `INSERT … status = 'running'` aus. Der Partial Unique Index `sync_runs_one_running ON ((true)) WHERE status = 'running'` hat für jede laufende Zeile denselben Schlüssel. Wessen `INSERT` den Index zuerst erreicht, gewinnt, nicht unbedingt der Request, der zuerst ankam. Der andere `INSERT` sieht den noch nicht bestätigten Eintrag und **wartet**, weil PostgreSQL noch nicht weiss, ob A bestätigt oder zurückrollt.
+4. A bestätigt. B bekommt `23505 unique_violation` mit Constraint `sync_runs_one_running`. (Hätte A zurückgerollt, wäre B durchgekommen.)
+5. B rollt zurück, `start` erkennt genau diesen Constraint (jeder andere Fehler wird weitergeworfen), liest den laufenden Lauf und gibt `{ started: false, runningRunId }` zurück. B startet keinen Runner.
+6. Antworten: A → **202** mit `Location: /sync/runs/<id>`. B → **409** mit `{ "error": "a sync run is already running", "runningRunId": <id> }`.
+
+Nicht die App entscheidet, sondern die Datenbank: Die `active`-Liste im `SyncService` kennt nur Läufe der eigenen Instanz. Nebenwirkung: Bs gescheiterter `INSERT` hat eine ID verbraucht (Lücke in den Lauf-IDs). Randfall: Endet As Lauf zwischen Schritt 4 und 5, findet B keinen laufenden Lauf mehr; dann versucht `start` es genau einmal neu, statt 409 mit `runningRunId: null` zu melden. Test: «zehn gleichzeitige Starts» in `sync-runs.repository.db-spec.ts`.
+
 ## Endstatus (`decideStatus`, rein)
 
 | Bedingung (erste zutreffende gilt)                                         | Status      | Deaktivierung |

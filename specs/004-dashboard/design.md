@@ -43,7 +43,9 @@ Symbole sind `aria-hidden="true"`; der Text trägt die Bedeutung (AK-2.1).
 
 **409 ist eine Information, kein Fehler.** Für den Nutzer heisst «läuft bereits» dasselbe wie «gestartet»: Die Daten werden gerade synchronisiert. Darum eine neutrale Meldung mit Verweis auf den laufenden Lauf statt einer roten Fehlermeldung (AK-3.3).
 
-**Knopf deaktivieren, aber der API vertrauen.** Der deaktivierte Knopf verhindert unnötige Klicks. Die eigentliche Sperre ist der Partial Unique Index (Spec 003, AK-7.2); zwischen zwei Polling-Zyklen kann ein anderer Nutzer starten. Ein deaktivierter Knopf bekommt einen sichtbaren Grund daneben und bleibt per `aria-describedby` damit verbunden, weil deaktivierte Elemente sonst nicht erklären, warum.
+**`aria-disabled` statt `disabled` (Review-Befund).** Wird ein fokussierter Knopf `disabled`, nimmt der Browser ihn aus der Fokus-Reihenfolge und setzt den Fokus auf `<body>`. Ein Screenreader-Nutzer verliert genau dann seine Position, wenn er auf eine Rückmeldung wartet. Mit `aria-disabled="true"` bleibt der Knopf fokussierbar und lesbar; eine Klick-Sperre im Handler (`if (blocked()) return`) verhindert die Wirkung. Der Test prüft `document.activeElement` vor und nach dem Klick (AK-3.6).
+
+**Knopf sperren, aber der API vertrauen.** Der gesperrte Knopf verhindert unnötige Klicks. Die eigentliche Sperre ist der Partial Unique Index (Spec 003, AK-7.2); zwischen zwei Polling-Zyklen kann ein anderer Nutzer starten. Ein gesperrter Knopf bekommt einen sichtbaren Grund daneben und ist per `aria-describedby` damit verbunden, damit der Screenreader sagt, *warum* er gesperrt ist.
 
 **Ankündigen nur bei Übergängen.** Eine Live-Region, die alle 3 s «läuft, Seite 38 von 100» vorliest, macht einen Screenreader unbenutzbar. Angekündigt wird, was eine Handlung des Nutzers beantwortet oder einen Lauf beendet.
 

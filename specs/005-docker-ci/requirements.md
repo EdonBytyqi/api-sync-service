@@ -27,8 +27,8 @@ Zwei Dinge, die App B bisher fehlen: Mit einem Befehl läuft das ganze System lo
 - **AK-3.2** Wenn das System startet, dann in dieser Reihenfolge: PostgreSQL gesund → Migration einmal ausgeführt und beendet (`service_completed_successfully`) → Service startet; Mock-ERP gesund → Service startet; Service gesund → Dashboard startet. Der Service migriert nie selbst (Spec 003, AK-1.3).
 - **AK-3.3** Wenn `docker compose up` ein zweites Mal läuft, dann ist die Migration ein Leerlauf und die Daten aus dem ersten Lauf sind noch da (benanntes Volume).
 - **AK-3.4** Wenn nichts konfiguriert ist, dann läuft das Mock mit seinen unzuverlässigen Standardraten. Über Umgebungsvariablen (z. B. `FAILURE_RATE=0 docker compose up`) lassen sie sich ändern.
-- **AK-3.5** Wenn ein Port nach aussen geöffnet wird, dann nur an `127.0.0.1`: Dashboard 8080, Service 3000, PostgreSQL 5432 (für `TEST_DATABASE_URL` und Entwicklung), Mock 4000.
-- **AK-3.6** Wenn der Service-Container gestoppt wird (`docker compose stop`), dann bricht er einen laufenden Lauf über SIGTERM sauber ab (Spec 003, AK-8.4); `stop_grace_period` ist dafür lang genug.
+- **AK-3.5** Wenn ein Port nach aussen geöffnet wird, dann nur an `127.0.0.1`: Dashboard 8080, Service 3000, PostgreSQL 5432 (für `TEST_DATABASE_URL` und Entwicklung), Mock 4000. Jeder Port ist über eine Variable änderbar, ohne die Datei zu bearbeiten (`DASHBOARD_PORT`, `SERVICE_PORT`, `POSTGRES_PORT`, `MOCK_PORT`), z. B. `POSTGRES_PORT=5433 docker compose up`, wenn lokal schon eine PostgreSQL auf 5432 läuft.
+- **AK-3.6** Wenn der Service-Container gestoppt wird (`docker compose stop`), dann bricht er einen laufenden Lauf über SIGTERM sauber ab (Spec 003, AK-8.4); `stop_grace_period` ist dafür lang genug. Der Container startet Node dafür direkt (`CMD ["node", "dist/main.js"]`), nicht über `npm`.
 
 ## Anforderung 4 – CI auf GitHub Actions
 

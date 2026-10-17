@@ -11,7 +11,7 @@ mock-erp ──healthy───────────────────�
 
 | Dienst      | Image / Build                      | Healthcheck                              | Port (nur 127.0.0.1) |
 | ----------- | ---------------------------------- | ---------------------------------------- | -------------------- |
-| `postgres`  | `postgres:17-alpine`, Volume `pgdata` | `pg_isready`                          | 5432                 |
+| `postgres`  | `postgres:17-alpine`, Volume `pgdata` | `pg_isready`                          | `${POSTGRES_PORT:-5432}` |
 | `migrate`   | Service-Image, `command: migrate`  | – (läuft einmal und endet)               | –                    |
 | `mock-erp`  | `./mock-erp`                       | `GET /health`                            | 4000                 |
 | `service`   | `.` (Root)                         | `GET /health`                            | 3000                 |
@@ -72,5 +72,9 @@ env:
 **Smoke-Test über das Dashboard, mit Mock-Raten 0.** Er prüft das Zusammenspiel aller Container inklusive nginx-Proxy und Migration, nicht noch einmal die Retry-Logik; die ist in den anderen Jobs abgedeckt. Mit Raten 0 ist das Ergebnis deterministisch (`completed`), ein roter Smoke-Test bedeutet also wirklich «das System läuft nicht».
 
 **Ports nur an `127.0.0.1`.** Die Compose-Datei ist für die lokale Entwicklung. Gebunden an alle Interfaces wäre die Datenbank mit Standardpasswort im ganzen Netz sichtbar.
+
+**`CMD ["node", "dist/main.js"]`, nie `npm run start:prod` (Review-Befund).** Docker schickt SIGTERM an PID 1 im Container. Mit `npm run …` ist das npm, und npm reicht SIGTERM nicht zuverlässig an den Node-Prozess weiter. Der Service merkt nichts, Docker wartet `stop_grace_period` ab und beendet ihn hart mit SIGKILL. Der laufende Lauf bleibt auf `running` liegen und wird erst nach 190 s als verwaist übernommen. Mit Node direkt kommt SIGTERM bei `enableShutdownHooks()` an. Zusätzlich `init: true` in Compose: Ein kleines Init (tini) ist PID 1, reicht Signale weiter und räumt Zombie-Prozesse ab. Dasselbe gilt für Mock (`node server.js`) und Migration (`node node_modules/node-pg-migrate/bin/node-pg-migrate.js up`). Geprüft wird es mit `docker compose stop service` während eines Laufs: Der Lauf muss danach `failed` mit `aborted: shutdown` sein, nicht `running`.
+
+**Ports über Variablen (Review-Befund).** Viele Entwickler haben schon eine PostgreSQL auf 5432; ein fester Port liesse `docker compose up` mit «port is already allocated» scheitern. Darum `127.0.0.1:${POSTGRES_PORT:-5432}:5432`, ebenso für die anderen Ports. Im Compose-Netz ändern sich die Ports nie, nur die Weiterleitung nach aussen.
 
 **`stop_grace_period: 30s` für den Service.** Docker sendet SIGTERM und nach 10 s standardmässig SIGKILL. Der Abbruch eines Laufs dauert nach Spec 003 Sekunden; 30 s geben Reserve, damit der Lauf als `failed` mit `aborted: shutdown` abgeschlossen wird statt als verwaister Lauf liegen zu bleiben.
