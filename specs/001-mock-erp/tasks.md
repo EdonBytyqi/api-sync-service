@@ -20,4 +20,6 @@
 - [x] **T8** README: Start, Tests, Umgebungsvariablen und Validierung dokumentieren.
 - [ ] **T9** AK-6.5 (Startmeldung) automatisch testen. Bisher nur manuell geprüft.
 - [x] **T10** `mock-erp/**` in `vitest.config.ts` und `vitest.config.e2e.ts` im Root ausschliessen, mit `...configDefaults.exclude`.
+- [x] **T12** Review-Befund: `page=1e2` wurde akzeptiert, weil `Number('1e2')` 100 ergibt. Query-Parameter und ganzzahlige Umgebungsvariablen (`SLOW_MS`, `PORT`) nur noch per `/^[1-9]\d*$/` bzw. `/^\d+$/` parsen. → AK-1.8
+- [x] **T13** Review-Befund: Der Test zu AK-6.2 mass Zeit mit der echten Uhr (`< 100 ms`). Das ist auf langsamen CI-Rechnern instabil und prüft nicht das Gemeinte. Jetzt mit `sleep`-Attrappe: wird nie aufgerufen. → AK-6.2
 - [ ] **T11** CI mit zwei Schritten: `npm test` im Root, `npm test` in `mock-erp/`. (Kommt mit der CI-Spec.)

@@ -20,6 +20,7 @@ Als Sync-Service möchte ich die Produktliste seitenweise abrufen, damit ich den
 - **AK-1.5** Wenn `page` hinter der letzten Seite liegt (z. B. `page=101&pageSize=100`), dann antwortet die API mit 200, `items: []` und `total: 10000`.
 - **AK-1.6** Wenn `page` oder `pageSize` fehlt, dann gilt `page=1` bzw. `pageSize=100`.
 - **AK-1.7** Wenn `page` oder `pageSize` keine positive Ganzzahl ist oder `pageSize` grösser als 1000 ist, dann antwortet die API sofort mit 400 und einer Fehlermeldung, ohne Fehler oder Verzögerung zu simulieren.
+- **AK-1.8** Wenn `page` oder `pageSize` nicht in einfacher Dezimalschreibweise angegeben ist (nur Ziffern, ohne Vorzeichen, Exponent, Hex-Präfix, Leerzeichen oder führende Null, z. B. `1e2`, `0x10`, `+5`, ` 5`, `05`), dann gilt AK-1.7 genauso, auch wenn `Number()` daraus eine gültige Zahl macht.
 
 ## Anforderung 2 – Stabile Reihenfolge
 
@@ -56,7 +57,7 @@ Als Entwickler möchte ich zufällige 429-Antworten, damit der Sync-Service den 
 Als Entwickler möchte ich das Verhalten über Umgebungsvariablen steuern, damit ich in Tests einen stabilen Server habe.
 
 - **AK-6.1** Wenn keine Umgebungsvariablen gesetzt sind, dann gelten `FAILURE_RATE=0.2`, `SLOW_RATE=0.1`, `RATE_LIMIT_RATE=0.05`, `SLOW_MS=5000` und `PORT=4000`.
-- **AK-6.2** Wenn `FAILURE_RATE`, `SLOW_RATE` und `RATE_LIMIT_RATE` auf 0 gesetzt sind, dann antwortet jede gültige Anfrage mit 200 in weniger als 100 ms.
+- **AK-6.2** Wenn `FAILURE_RATE`, `SLOW_RATE` und `RATE_LIMIT_RATE` auf 0 gesetzt sind, dann antwortet jede gültige Anfrage mit 200, ohne zu warten (die Warte-Funktion wird nie aufgerufen).
 - **AK-6.3** Wenn eine Rate auf 1 gesetzt ist, dann tritt das entsprechende Verhalten bei jeder gültigen Anfrage ein.
 - **AK-6.4** Wenn eine Rate keine Zahl zwischen 0 und 1 ist (z. B. `FAILURE_RATE=abc` oder `1.5`), `SLOW_MS` keine nicht-negative Ganzzahl ist, `PORT` keine Ganzzahl zwischen 1 und 65535 ist oder `FAILURE_RATE + RATE_LIMIT_RATE` grösser als 1 ist, dann startet der Server nicht, endet mit Exit-Code 1 und nennt jede ungültige Variable.
 - **AK-6.5** Wenn der Server startet, dann gibt er Port und aktive Raten auf der Konsole aus.

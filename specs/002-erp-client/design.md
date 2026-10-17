@@ -32,6 +32,7 @@ interface ErpClientDeps {
 class ErpClient {
   constructor(config: ErpConfig, deps?: Partial<ErpClientDeps>);
   fetchPage(page: number, pageSize: number, signal?: AbortSignal): Promise<ProductPage>;
+  static maxDurationMs(config: ErpConfig): number; // AK-10
 }
 
 type ErpErrorReason =
@@ -48,7 +49,11 @@ Argumente prüfen → bei Fehler 'invalidArgument'
 für attempt = 1 … maxAttempts:
   signal schon abgebrochen? → 'aborted'
   attemptSignal = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
-  Ergebnis = fetch + Body lesen + Schema prüfen, alles unter attemptSignal
+  unter attemptSignal:
+    response = await fetch(url)        ─┐ Fehler hier: Abbruch des Aufrufers → 'aborted',
+    text     = await response.text()   ─┘ Timeout → 'timeout', sonst → 'network' (retrybar)
+  JSON.parse(text)                      → Fehler: 'invalidResponse' (Body war vollständig)
+  Schema prüfen, page/pageSize = angefragt? → sonst 'invalidResponse'
   classify(Ergebnis):
     Erfolg            → Seite zurückgeben
     endgültig         → ErpError werfen (retryable: false)
@@ -58,14 +63,17 @@ für attempt = 1 … maxAttempts:
                         logger.warn(...); await sleep(delay, signal)
 ```
 
-| Ergebnis                                   | Klasse     | Wartezeit vor dem nächsten Versuch       |
-| ------------------------------------------ | ---------- | ---------------------------------------- |
-| 200 + gültiges Schema                      | Erfolg     | –                                        |
-| 200 + ungültiges JSON/Schema               | endgültig  | –                                        |
-| 400, 401, 403, 404, 422, übrige 4xx        | endgültig  | –                                        |
-| 408, 500, 502, 504, Timeout, Netzwerkfehler | retrybar   | Backoff mit Jitter                       |
-| 429, 503                                   | retrybar   | `Retry-After`, ohne gültigen Header Backoff |
-| Abbruch durch Aufrufer                     | endgültig  | –                                        |
+| Ergebnis eines Versuchs                                         | Klasse     | Wartezeit vor dem nächsten Versuch          |
+| --------------------------------------------------------------- | ---------- | ------------------------------------------- |
+| 200, Body vollständig, gültig, richtige Seite                    | Erfolg     | –                                           |
+| 200, Body vollständig, aber ungültiges JSON/Schema/falsche Seite | endgültig  | –                                           |
+| Verbindungsabbruch beim Verbinden **oder beim Lesen des Body**   | retrybar   | Backoff mit Jitter                          |
+| Timeout (auch beim Lesen des Body)                              | retrybar   | Backoff mit Jitter                          |
+| 408, 500, 502, 504                                              | retrybar   | Backoff mit Jitter                          |
+| 429, 503                                                        | retrybar   | `Retry-After`, ohne gültigen Header Backoff |
+| 400, 401, 403, 404, 422, übrige 4xx                             | endgültig  | –                                           |
+| übrige Status (z. B. 501, 505)                                  | endgültig  | –                                           |
+| Abbruch durch Aufrufer                                          | endgültig  | –                                           |
 
 ## Entscheidungen
 
@@ -73,11 +81,17 @@ für attempt = 1 … maxAttempts:
 
 **Kein Retry bei 400 und anderen 4xx.** Ein 4xx sagt: «Dein Request ist falsch». Derselbe Request bekommt dieselbe Antwort, ein Retry kann also nicht helfen. Er würde nur Versuche verbrauchen, den Fehler um mehrere Sekunden verzögern, das ERP zusätzlich belasten und einen Programmierfehler hinter Warn-Logs verstecken. Beim Mock ist das garantiert: Er validiert vor dem Chaos (Spec 001), ein 400 ist also nie zufällig. Ausnahmen sind 408 («Request Timeout») und 429 («zu viele Requests»): Beide beschreiben einen Zustand, keinen falschen Request.
 
+**Lesen und Parsen sind zwei Schritte: `response.text()`, dann `JSON.parse`.** Bricht die Verbindung mitten im Body ab, wirft schon `text()` (in Node ein `TypeError: terminated`, Code `UND_ERR_SOCKET`); das ist ein Netzwerkfehler und wird wiederholt. Erst wenn der Body vollständig da ist, kann `JSON.parse` scheitern (`SyntaxError`); das ist ein Vertragsbruch und endgültig. `response.json()` würde beides in einem Aufruf vermischen, und wir müssten am Fehlertyp raten. Mit zwei Schritten ergibt sich die Unterscheidung aus der Stelle, an der der Fehler auftritt. Beide Fälle sind mit einem echten HTTP-Server getestet, nicht nur mit Attrappen.
+
+**Die Antwort muss zur Anfrage passen.** Liefert das ERP für Seite 37 die Seite 36, ist das Schema gültig, aber der Sync würde still die falsche Seite speichern und Seite 37 nie bekommen. Deshalb prüft der Client `page` und `pageSize` gegen die Anfrage und `items.length <= pageSize` (AK-1.5).
+
 **Ungültige Antworten werden nicht wiederholt.** Ein 200 mit falschem Schema ist ein Vertragsbruch des ERP, kein vorübergehender Fehler. Ein Retry würde ihn verdecken. Der Sync-Job soll laut scheitern, statt kaputte Daten zu speichern. Geprüft wird von Hand ohne Schema-Bibliothek; falls später mehr Endpunkte dazukommen, ist `zod` eine Option.
 
 **Full Jitter statt festem Backoff.** Ohne Jitter versuchen alle Clients, die gleichzeitig einen Fehler bekamen, es auch gleichzeitig wieder, und das ERP wird in Wellen getroffen («Thundering Herd»). Full Jitter (`random() × Obergrenze`) verteilt die Versuche über das ganze Intervall. Im Vergleich der AWS-Architektur-Blogs erzeugt es die wenigsten Requests insgesamt. Der Preis: Die Wartezeit kann 0 sein; das ist akzeptabel, weil die Obergrenze trotzdem exponentiell wächst.
 
 **`Retry-After` hat Vorrang vor dem Backoff, ohne zusätzlichen Jitter.** Das ERP sagt genau, wann es wieder bereit ist; kürzer zu warten wäre unhöflich und würde wieder 429 erzeugen. Länger als nötig zu warten kostet nur Zeit. Mit einer einzigen Service-Instanz gibt es keine Herde, die wir verteilen müssten. Bei mehreren Instanzen würden wir `Retry-After + random() × baseDelayMs` verwenden.
+
+**`Retry-After` streng parsen.** Erlaubt sind nur Ziffern (Sekunden) oder IMF-fixdate (`Wed, 21 Oct 2026 07:28:00 GMT`). `Date.parse` allein reicht nicht: In V8 ergeben `Date.parse('-1')` und `Date.parse('5')` gültige Daten (Jahr 2001), ein ungültiger Header würde also still als Datum in der Vergangenheit gelesen. Die älteren Formate aus RFC 9110 (RFC 850, asctime) unterstützen wir nicht; sie fallen auf den Backoff zurück.
 
 **429 zählt gegen `maxAttempts`.** Sonst könnte ein dauerhaft überlastetes ERP den Client endlos warten lassen. Der Aufrufer bekommt nach endlicher Zeit eine Antwort.
 
@@ -97,4 +111,11 @@ für attempt = 1 … maxAttempts:
 
 Mit den Mock-Standardraten scheitert ein Versuch mit Wahrscheinlichkeit 1 − 0.9 × 0.75 = 0.325 (25 % Fehler, dazu 10 % Timeouts). Mit 5 Versuchen scheitert eine Seite endgültig mit 0.325⁵ ≈ 0.36 %. Bei 100 Seiten scheitert damit in etwa **30 % der Sync-Läufe mindestens eine Seite**. Der Client allein reicht also nicht: Der Sync-Job muss mit einzelnen gescheiterten Seiten umgehen können (später erneut versuchen, Lauf nicht als Ganzes verwerfen). Alternativ senken 8 Versuche das Risiko auf rund 1 % pro Lauf.
 
-Schlimmster Fall für eine Seite mit Standardwerten: 5 Timeouts à 2 s plus 4 Pausen von höchstens 2 s (429) ≈ 18 s.
+**Höchstdauer eines `fetchPage` (AK-10.1).** Jeder Versuch dauert höchstens `timeoutMs`. Jede Pause dauert höchstens `maxDelayMs` (Backoff) oder `maxRetryAfterMs` (`Retry-After`, alles darüber bricht sofort ab). Also:
+
+```
+maxAttempts × timeoutMs + (maxAttempts − 1) × max(maxDelayMs, maxRetryAfterMs)
+= 5 × 2 s + 4 × 30 s = 130 s
+```
+
+Mit dem Mock (`Retry-After: 2`) sind es in der Praxis höchstens 5 × 2 s + 4 × 2 s = 18 s, aber verlassen darf sich Spec 003 nur auf die 130 s. Die Regel «nie zwei Syncs gleichzeitig» braucht deshalb eine Sperre, die nicht vor 130 s × Seitenzahl abläuft, oder besser eine Sperre, die der laufende Sync aktiv hält. Ein festes Intervall «alle 5 Minuten» würde sich bei 100 Seiten überschneiden.

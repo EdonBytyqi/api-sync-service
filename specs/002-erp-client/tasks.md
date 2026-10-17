@@ -1,6 +1,6 @@
 # 002 – ERP-Client: Aufgaben
 
-> Status: Spec zur Review. Noch kein Code.
+> Status: Spec reviewt. Änderungen aus der Review: Netzwerkfehler beim Lesen des Body ≠ ungültige Antwort (AK-1.3, AK-1.4), Antwort muss zur Anfrage passen (AK-1.5), Höchstdauer 130 s statt 18 s (AK-10).
 
 - [ ] **T1** `src/erp/erp-config.ts`: `loadErpConfig(env)` mit Standardwerten und Validierung, Unit-Tests. → AK-8.1, AK-8.2
 - [ ] **T2** `src/erp/erp-error.ts`: `ErpError` mit `reason`, `retryable`, `attempts`, `status`, `retryAfterMs`, `cause`. → AK-3.5, AK-4.5, AK-5.1, AK-5.3
@@ -9,7 +9,9 @@
   - `backoffDelay`: Obergrenzen, Deckel bei `maxDelayMs`, `random` 0 / 0.5 / 0.999. → AK-3.2–3.4
   - `parseRetryAfter`: Sekunden, HTTP-Datum mit festem `now`, Datum in der Vergangenheit, fehlend, ungültig. → AK-4.1–4.3
 - [ ] **T4** `src/erp/erp-client.ts` mit Unit-Tests über `fetch`-, `sleep`-, `random`- und `now`-Attrappen:
-  - Erfolg, Request-Form, ungültige Argumente, ungültige Antworten. → AK-1.1–1.4
+  - Erfolg, Request-Form, ungültige Argumente, ungültige Antworten, falsche Seite. → AK-1.1–1.3, AK-1.5, AK-1.6
+  - Echter `node:http`-Server: Verbindungsabbruch mitten im Body wird wiederholt, vollständiger aber kaputter Body nicht. → AK-1.3, AK-1.4
+  - `maxDurationMs`. → AK-10.1, AK-10.2
   - Timeout mit hängender `fetch`-Attrappe und `timeoutMs: 20`, auch beim Body. → AK-2.1–2.3
   - Retry-Folgen mit exakten Wartezeiten, `maxAttempts`, kein Warten nach dem letzten Versuch, Log pro Retry. → AK-3.3, AK-3.5–3.7, AK-7.2
   - 429/503 mit `Retry-After`, Zählung, Obergrenze. → AK-4.1–4.6
