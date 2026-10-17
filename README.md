@@ -25,6 +25,36 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## ERP client
+
+`src/erp/` fetches one page of products from the ERP (spec: [`specs/002-erp-client`](specs/002-erp-client/requirements.md)). For local development, run the unreliable mock ERP in [`mock-erp/`](mock-erp/README.md).
+
+| Env var                  | Default                 | Meaning                                             |
+| ------------------------ | ----------------------- | --------------------------------------------------- |
+| `ERP_BASE_URL`           | `http://localhost:4000` | ERP base URL                                        |
+| `ERP_TIMEOUT_MS`         | `2000`                  | Timeout per attempt, including reading the body     |
+| `ERP_MAX_ATTEMPTS`       | `5`                     | Attempts in total, including the first              |
+| `ERP_BASE_DELAY_MS`      | `200`                   | Backoff base: cap is `base × 2^(attempt−1)`         |
+| `ERP_MAX_DELAY_MS`       | `5000`                  | Backoff cap                                         |
+| `ERP_MAX_RETRY_AFTER_MS` | `30000`                 | Longer `Retry-After` → fail with `rateLimited`      |
+
+Invalid values stop the app at startup, naming each bad variable.
+
+Behaviour on failure:
+
+- **Retried** with full-jitter backoff: timeouts, network errors (also mid-body), 408, 500, 502, 504.
+- **Retried after `Retry-After`** (seconds or HTTP date): 429 and 503. Without a valid header: backoff.
+- **Not retried**: 400 and other 4xx, other 5xx such as 501, and a complete body that is invalid JSON, breaks the schema or is the wrong page.
+- Errors are `ErpError` with `reason`, `retryable`, `attempts`, `status` and, for long rate limits, `retryAfterMs`.
+- One `fetchPage` takes at most `ErpClient.maxDurationMs(config)`: 130 s with the defaults.
+
+```bash
+npm test             # unit tests, incl. a real node:http server for dropped bodies
+npm run test:e2e     # against the real mock-erp, started as a child process
+                     # (needs `npm install` in mock-erp/ first)
+cd mock-erp && npm test
+```
+
 ## Project setup
 
 ```bash
