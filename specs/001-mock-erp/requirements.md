@@ -16,7 +16,7 @@ Als Sync-Service möchte ich die Produktliste seitenweise abrufen, damit ich den
 - **AK-1.1** Wenn `GET /products?page=1&pageSize=100` aufgerufen wird und kein Fehler simuliert wird, dann antwortet die API mit 200 und genau 100 Produkten, sortiert nach `id`.
 - **AK-1.2** Wenn `GET /products?page=37&pageSize=100` aufgerufen wird und kein Fehler simuliert wird, dann enthält `items` die Produkte mit `id` 3601 bis 3700.
 - **AK-1.3** Wenn eine Anfrage erfolgreich ist, dann hat die Antwort die Form `{ "items": [...], "page": <n>, "pageSize": <n>, "total": 10000 }`, wobei `page` und `pageSize` den angefragten Werten entsprechen.
-- **AK-1.4** Wenn ein Produkt geliefert wird, dann hat es genau die Felder `id` (Ganzzahl), `sku` (String), `name` (String), `priceCents` (Ganzzahl > 0) und `updatedAt` (ISO-8601-Zeitstempel in UTC).
+- **AK-1.4** Wenn ein Produkt geliefert wird, dann hat es genau die Felder `id` (Ganzzahl), `sku` (String), `name` (String), `priceCents` (Ganzzahl > 0; der ERP-Client akzeptiert auch 0, siehe Spec 002 Design) und `updatedAt` (ISO-8601-Zeitstempel in UTC).
 - **AK-1.5** Wenn `page` hinter der letzten Seite liegt (z. B. `page=101&pageSize=100`), dann antwortet die API mit 200, `items: []` und `total: 10000`.
 - **AK-1.6** Wenn `page` oder `pageSize` fehlt, dann gilt `page=1` bzw. `pageSize=100`.
 - **AK-1.7** Wenn `page` oder `pageSize` keine positive Ganzzahl ist oder `pageSize` grösser als 1000 ist, dann antwortet die API sofort mit 400 und einer Fehlermeldung, ohne Fehler oder Verzögerung zu simulieren.

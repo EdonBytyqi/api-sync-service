@@ -1,6 +1,11 @@
 import type { ErpConfig } from './erp-config.js';
 import { ErpError, type ErpErrorReason } from './erp-error.js';
-import { type AttemptOutcome, classify, retryDelay } from './retry-policy.js';
+import {
+  type AttemptOutcome,
+  classify,
+  retryAfterOf,
+  retryDelay,
+} from './retry-policy.js';
 
 export interface Product {
   id: number;
@@ -253,6 +258,10 @@ export class ErpClient {
         retryable,
         attempts,
         status: this.statusOf(result.outcome),
+        // The caller needs "when may I ask again" most after the last attempt (AK-4.7).
+        retryAfterMs: retryable
+          ? retryAfterOf(result.outcome, this.deps.now())
+          : undefined,
         cause: result.cause,
       },
     );

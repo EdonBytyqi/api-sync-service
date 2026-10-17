@@ -21,7 +21,7 @@ Als Sync-Job möchte ich eine Seite mit einem Aufruf holen, damit ich mich nicht
 
 - **AK-1.1** Wenn `fetchPage(37, 100)` aufgerufen wird und das ERP beim ersten Versuch mit 200 antwortet, dann liefert der Client `{ items, page: 37, pageSize: 100, total }` nach genau einem Versuch und ohne zu warten.
 - **AK-1.2** Wenn `fetchPage(37, 100)` aufgerufen wird, dann sendet der Client `GET <ERP_BASE_URL>/products?page=37&pageSize=100` mit dem Header `Accept: application/json`.
-- **AK-1.3** Wenn die Antwort 200 ist und der Body **vollständig angekommen** ist, aber kein gültiges JSON ist oder nicht dem Schema entspricht (z. B. `items` fehlt, `priceCents` keine Ganzzahl, `updatedAt` kein ISO-Zeitstempel), dann wirft der Client einen `ErpError` mit `reason: 'invalidResponse'`, ohne Retry.
+- **AK-1.3** Wenn die Antwort 200 ist und der Body **vollständig angekommen** ist, aber kein gültiges JSON ist oder nicht dem Schema entspricht (z. B. `items` fehlt, `priceCents` keine nicht-negative Ganzzahl, `updatedAt` kein ISO-Zeitstempel), dann wirft der Client einen `ErpError` mit `reason: 'invalidResponse'`, ohne Retry.
 - **AK-1.4** Wenn die Verbindung abbricht, während der Body gelesen wird, dann ist das ein Netzwerkfehler (`reason: 'network'`) und wird nach AK-3.1 wiederholt, nicht als `invalidResponse` behandelt.
 - **AK-1.5** Wenn `page` oder `pageSize` in der Antwort nicht den angefragten Werten entsprechen (z. B. Seite 36 statt 37) oder `items` mehr als `pageSize` Einträge hat, dann wirft der Client einen `ErpError` mit `reason: 'invalidResponse'`, ohne Retry, auch wenn das Schema sonst gültig ist.
 - **AK-1.6** Wenn `page` oder `pageSize` keine positive Ganzzahl ist oder `pageSize` grösser als 1000 ist, dann wirft der Client einen `ErpError` mit `reason: 'invalidArgument'`, ohne einen Request zu senden.
@@ -57,6 +57,7 @@ Als Sync-Job möchte ich die Vorgabe des ERP zum Warten einhalten, damit wir nic
 - **AK-4.4** Wenn ein Versuch mit 429 endet, dann zählt er wie jeder andere Versuch gegen `maxAttempts`.
 - **AK-4.5** Wenn `Retry-After` länger als `maxRetryAfterMs` (Standard 30000) ist, dann wartet der Client nicht, sondern wirft sofort einen `ErpError` mit `reason: 'rateLimited'`, `retryable: true` und `retryAfterMs`, damit der Aufrufer selbst planen kann.
 - **AK-4.6** Wenn das ERP mit 503 und einem gültigen `Retry-After` antwortet, dann gelten AK-4.1 bis AK-4.5 genauso.
+- **AK-4.7** Wenn der **letzte** Versuch mit 429 oder 503 und einem gültigen `Retry-After` endet, dann enthält der `ErpError` neben `reason: 'http'` und `status` auch `retryAfterMs`, damit der Aufrufer weiss, wann er die Seite frühestens erneut anfragen darf. Ohne gültigen Header fehlt `retryAfterMs`.
 
 ## Anforderung 5 – Kein Retry bei Client-Fehlern
 

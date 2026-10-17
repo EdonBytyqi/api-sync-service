@@ -27,3 +27,5 @@
   - AK-5.1 mit einem echten 400 des Mocks: Eine `fetch`-Hülle verfälscht die URL zu `page=1e2`, weil der Client selbst nie ungültige Parameter sendet.
 - [x] **T7** README: Konfiguration des ERP-Clients, Verhalten bei Fehlern, Tests.
 - [ ] **T8** CI muss vor `npm run test:e2e` auch `npm install` in `mock-erp/` ausführen (zu Spec 001 T11).
+- [x] **T9** Review-Befund: Endete der letzte Versuch mit 429 + `Retry-After`, ging `retryAfterMs` verloren. Jetzt trägt der `ErpError` den Wert, sobald der letzte Versuch einen gültigen Header hatte; `retryAfterOf` als reine Funktion. 7 neue Tests. → AK-4.7
+- [x] **T10** Review-Befund: `priceCents >= 0` im Client vs. `> 0` im Mock als Entscheidung dokumentiert (Design). → AK-1.3

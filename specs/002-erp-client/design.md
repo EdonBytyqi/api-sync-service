@@ -85,6 +85,10 @@ für attempt = 1 … maxAttempts:
 
 **Die Antwort muss zur Anfrage passen.** Liefert das ERP für Seite 37 die Seite 36, ist das Schema gültig, aber der Sync würde still die falsche Seite speichern und Seite 37 nie bekommen. Deshalb prüft der Client `page` und `pageSize` gegen die Anfrage und `items.length <= pageSize` (AK-1.5).
 
+**`priceCents >= 0`, nicht `> 0`.** Das Mock erzeugt nur Preise ab 100 Rappen (Spec 001, AK-1.4), aber ein echtes ERP kann Gratisartikel führen (Muster, Werbeartikel, Pfand-Rückgabe mit 0). Der Client soll sie nicht als Vertragsbruch ablehnen und damit eine ganze Seite verlieren. Negative Preise lehnt er ab. Die Daten des Mocks sind eine Teilmenge dessen, was der Client akzeptiert; die beiden Specs widersprechen sich also nicht. Die Datenbank (Spec 003) prüft dasselbe mit `CHECK (price_cents >= 0)`.
+
+**`retryAfterMs` auch beim letzten Versuch (AK-4.7).** Endet der letzte Versuch mit 429 und `Retry-After: 2`, ist das für den Aufrufer die wichtigste Information: «Diese Seite in 2 s noch einmal». Der Sync-Job (Spec 003) braucht sie für seinen zweiten Durchgang. Deshalb trägt der `ErpError` den Wert immer, wenn der letzte Versuch einen gültigen Header hatte, nicht nur beim Abbruch wegen `maxRetryAfterMs`.
+
 **Ungültige Antworten werden nicht wiederholt.** Ein 200 mit falschem Schema ist ein Vertragsbruch des ERP, kein vorübergehender Fehler. Ein Retry würde ihn verdecken. Der Sync-Job soll laut scheitern, statt kaputte Daten zu speichern. Geprüft wird von Hand ohne Schema-Bibliothek; falls später mehr Endpunkte dazukommen, ist `zod` eine Option.
 
 **Full Jitter statt festem Backoff.** Ohne Jitter versuchen alle Clients, die gleichzeitig einen Fehler bekamen, es auch gleichzeitig wieder, und das ERP wird in Wellen getroffen («Thundering Herd»). Full Jitter (`random() × Obergrenze`) verteilt die Versuche über das ganze Intervall. Im Vergleich der AWS-Architektur-Blogs erzeugt es die wenigsten Requests insgesamt. Der Preis: Die Wartezeit kann 0 sein; das ist akzeptabel, weil die Obergrenze trotzdem exponentiell wächst.

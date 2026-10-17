@@ -535,6 +535,7 @@ describe('Anforderung 4 – 429 und Retry-After', () => {
     });
     expect(fetch).toHaveBeenCalledTimes(5);
     expect(sleeps()).toEqual([2000, 2000, 2000, 2000]);
+    expect(err.retryAfterMs).toBe(2000); // AK-4.7
   });
 
   it('AK-4.5 Retry-After über maxRetryAfterMs: sofort rateLimited mit retryAfterMs', async () => {
@@ -572,6 +573,66 @@ describe('Anforderung 4 – 429 und Retry-After', () => {
     await client.fetchPage(37, 2);
 
     expect(sleeps()).toEqual([2000]);
+  });
+
+  it.each([
+    ['429', 429],
+    ['503', 503],
+  ])(
+    'AK-4.7 letzter Versuch %s mit Retry-After: ErpError trägt retryAfterMs',
+    async (_, code) => {
+      const { client } = setup(
+        [status(500), status(code, { 'Retry-After': '2' })],
+        { config: { maxAttempts: 2 } },
+      );
+
+      const err = await failure(client.fetchPage(37, 2));
+
+      expect(err).toMatchObject({
+        reason: 'http',
+        status: code,
+        attempts: 2,
+        retryable: true,
+        retryAfterMs: 2000,
+      });
+    },
+  );
+
+  it('AK-4.7 auch mit HTTP-Datum, gemessen mit now()', async () => {
+    const { client } = setup(
+      [status(429, { 'Retry-After': 'Wed, 21 Oct 2026 07:28:05 GMT' })],
+      { config: { maxAttempts: 1 }, now: () => now },
+    );
+
+    const err = await failure(client.fetchPage(37, 2));
+
+    expect(err.retryAfterMs).toBe(5000);
+  });
+
+  it.each<[string, Response]>([
+    ['429 ohne Header', status(429)],
+    ['429 mit ungültigem Header', status(429, { 'Retry-After': 'abc' })],
+    [
+      '500 mit Header (gilt nur für 429/503)',
+      status(500, { 'Retry-After': '2' }),
+    ],
+  ])('AK-4.7 %s: kein retryAfterMs', async (_, reply) => {
+    const { client } = setup([reply], { config: { maxAttempts: 1 } });
+
+    const err = await failure(client.fetchPage(37, 2));
+
+    expect(err.retryAfterMs).toBeUndefined();
+  });
+
+  it('AK-4.7 ein früheres Retry-After geht nicht in den Fehler des letzten Versuchs ein', async () => {
+    const { client } = setup(
+      [status(429, { 'Retry-After': '2' }), status(500)],
+      { config: { maxAttempts: 2 } },
+    );
+
+    const err = await failure(client.fetchPage(37, 2));
+
+    expect(err).toMatchObject({ status: 500, retryAfterMs: undefined });
   });
 });
 

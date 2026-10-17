@@ -68,6 +68,17 @@ export interface RetryDelay {
   source: 'retryAfter' | 'backoff';
 }
 
+/** The server-requested wait for 429/503 with a valid Retry-After, else undefined. */
+export function retryAfterOf(
+  outcome: AttemptOutcome,
+  now: number,
+): number | undefined {
+  if (outcome.kind !== 'http' || !RETRY_AFTER_STATUS.has(outcome.status)) {
+    return undefined;
+  }
+  return parseRetryAfter(outcome.retryAfter, now);
+}
+
 /** How long to wait after `attempt` failed with a retryable `outcome`. */
 export function retryDelay(
   outcome: AttemptOutcome,
@@ -76,9 +87,7 @@ export function retryDelay(
   random: () => number,
   now: number,
 ): RetryDelay {
-  if (outcome.kind === 'http' && RETRY_AFTER_STATUS.has(outcome.status)) {
-    const delayMs = parseRetryAfter(outcome.retryAfter, now);
-    if (delayMs !== undefined) return { delayMs, source: 'retryAfter' };
-  }
+  const delayMs = retryAfterOf(outcome, now);
+  if (delayMs !== undefined) return { delayMs, source: 'retryAfter' };
   return { delayMs: backoffDelay(attempt, config, random), source: 'backoff' };
 }
