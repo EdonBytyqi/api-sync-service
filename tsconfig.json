@@ -19,5 +19,7 @@
     "strict": true,
     "strictPropertyInitialization": false,
     "types": ["vitest/globals", "node"]
-  }
+  },
+  // Separate packages with their own toolchains.
+  "exclude": ["node_modules", "dist", "dashboard", "mock-erp"]
 }

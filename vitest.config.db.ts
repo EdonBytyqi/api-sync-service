@@ -7,7 +7,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.db-spec.ts'],
-    exclude: [...configDefaults.exclude, 'mock-erp/**'],
+    exclude: [...configDefaults.exclude, 'mock-erp/**', 'dashboard/**'],
     globalSetup: ['./test/db/global-setup.ts'],
     hookTimeout: 120_000, // first container start may pull the image
     testTimeout: 30_000,

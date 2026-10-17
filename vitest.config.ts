@@ -8,8 +8,8 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
-    // mock-erp is a separate package with its own tests (npm test in mock-erp/).
+    // mock-erp and dashboard are separate packages with their own tests.
     // Spread the defaults: a custom exclude replaces them, node_modules included.
-    exclude: [...configDefaults.exclude, 'mock-erp/**'],
+    exclude: [...configDefaults.exclude, 'mock-erp/**', 'dashboard/**'],
   },
 });

@@ -1,0 +1,72 @@
+<main>
+  <h1>ERP-Synchronisation</h1>
+
+  <section class="actions" aria-label="Aktionen">
+    <button
+      type="button"
+      class="primary"
+      [attr.aria-disabled]="blocked() ? 'true' : null"
+      [attr.aria-describedby]="blockedReason() ? 'sync-blocked-reason' : null"
+      (click)="startSync()"
+    >
+      {{ starting() ? 'Wird gestartet …' : 'Jetzt synchronisieren' }}
+    </button>
+    @if (blockedReason(); as reason) {
+      <p id="sync-blocked-reason" class="hint">{{ reason }}</p>
+    }
+  </section>
+
+  <!-- Always in the DOM so screen readers register it before it changes (AK-5.3). -->
+  <p class="notice" aria-live="polite" aria-atomic="true">{{ store.announcement() }}</p>
+
+  @if (startError(); as message) {
+    <div class="alert" role="alert">{{ message }}</div>
+  }
+
+  @if (store.error(); as error) {
+    <div class="alert" role="alert">
+      <p>Die Läufe konnten nicht geladen werden ({{ error }}).</p>
+      @if (lastUpdatedText(); as at) {
+        <p>Angezeigt ist der Stand von {{ at }}.</p>
+      }
+      <button type="button" (click)="retry()">Erneut versuchen</button>
+    </div>
+  }
+
+  @if (!store.loaded()) {
+    <p>Wird geladen …</p>
+  } @else if (store.runs().length === 0) {
+    @if (!store.error()) {
+      <p>Noch keine Läufe.</p>
+    }
+  } @else {
+    <div class="table-scroll" role="region" aria-labelledby="runs-caption" tabindex="0">
+      <table>
+        <caption id="runs-caption">
+          Die letzten {{ limit }} Sync-Läufe, neueste zuerst
+          @if (lastUpdatedText(); as at) {
+            <span class="muted">(Stand: {{ at }})</span>
+          }
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Lauf</th>
+            <th scope="col">Auslöser</th>
+            <th scope="col">Status</th>
+            <th scope="col">Start</th>
+            <th scope="col">Dauer</th>
+            <th scope="col">Seiten</th>
+            <th scope="col">Neu</th>
+            <th scope="col">Geändert</th>
+            <th scope="col">Unverändert</th>
+            <th scope="col">Reaktiviert</th>
+            <th scope="col">Deaktiviert</th>
+          </tr>
+        </thead>
+        @for (run of store.runs(); track run.id) {
+          <tbody app-run-row [run]="run" [now]="now()" [highlighted]="highlightId() === run.id"></tbody>
+        }
+      </table>
+    </div>
+  }
+</main>
