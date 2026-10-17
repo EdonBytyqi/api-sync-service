@@ -1,0 +1,14 @@
+{
+  "name": "mock-erp",
+  "version": "0.0.1",
+  "description": "Deliberately unreliable mock ERP API used to exercise api-sync-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "start:stable": "node --env-file=.env.stable server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
