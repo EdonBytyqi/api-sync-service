@@ -1,0 +1,17 @@
+# Local PostgreSQL for development and for TEST_DATABASE_URL.
+#   docker compose up -d
+#   DATABASE_URL=postgres://sync:sync@localhost:5432/sync npm run migrate
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: sync
+      POSTGRES_PASSWORD: sync
+      POSTGRES_DB: sync
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sync -d sync']
+      interval: 2s
+      timeout: 2s
+      retries: 15
