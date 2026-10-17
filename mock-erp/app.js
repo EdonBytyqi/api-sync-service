@@ -33,10 +33,11 @@ export function rollChaos(config, random) {
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Digits only: Number() alone would accept '1e2', '0x10', ' 5' and '+5'.
+const POSITIVE_INT = /^[1-9]\d*$/;
 const parsePositiveInt = (value, fallback) => {
   if (value === undefined) return fallback;
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  return typeof value === 'string' && POSITIVE_INT.test(value) ? Number(value) : null;
 };
 
 // `random` and `sleep` are injectable so tests decide each request's fate

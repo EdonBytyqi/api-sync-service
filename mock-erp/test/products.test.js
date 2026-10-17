@@ -64,6 +64,12 @@ describe('Anforderung 1 – Produkte seitenweise abrufen', () => {
     ['repeated page', 'page=1&page=2'],
     ['pageSize=0', 'pageSize=0'],
     [`pageSize > ${MAX_PAGE_SIZE}`, `pageSize=${MAX_PAGE_SIZE + 1}`],
+    ['AK-1.8 exponent', 'page=1e2'],
+    ['AK-1.8 hex', 'page=0x10'],
+    ['AK-1.8 plus sign', 'page=%2B5'],
+    ['AK-1.8 leading space', 'page=%205'],
+    ['AK-1.8 leading zero', 'page=05'],
+    ['AK-1.8 trailing .0', 'pageSize=10.0'],
   ])('AK-1.7 %s liefert sofort 400, ohne Fehler oder Verzögerung zu simulieren', async (_, query) => {
     const random = sequence(); // throws if drawn at all
     const sleep = noSleep();

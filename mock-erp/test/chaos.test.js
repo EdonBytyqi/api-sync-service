@@ -122,14 +122,15 @@ describe('Anforderung 5 – Rate Limiting (429)', () => {
 });
 
 describe('Anforderung 6 – Konfiguration (Verhalten)', () => {
-  it('AK-6.2 mit allen Raten 0 antwortet jede Anfrage mit 200 in unter 100 ms', async () => {
-    const app = createApp(stableConfig());
+  it('AK-6.2 mit allen Raten 0 antwortet jede Anfrage mit 200, ohne zu warten', async () => {
+    // Asserts "never sleeps" instead of timing against the real clock,
+    // which is flaky on slow CI machines and doesn't test the intent.
+    const sleep = noSleep();
+    const app = createApp(stableConfig(), { sleep }); // real Math.random
     for (let i = 0; i < 50; i++) {
-      const start = performance.now();
-      const res = await get(app);
-      expect(res.status).toBe(200);
-      expect(performance.now() - start).toBeLessThan(100);
+      expect((await get(app)).status).toBe(200);
     }
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it.each([

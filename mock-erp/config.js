@@ -7,8 +7,8 @@ const DEFAULTS = {
 };
 
 const isRate = (v) => v >= 0 && v <= 1; // false for NaN
-const isNonNegativeInt = (v) => Number.isInteger(v) && v >= 0;
-const isPort = (v) => Number.isInteger(v) && v >= 1 && v <= 65535;
+const isNonNegativeInt = (v, raw) => /^\d+$/.test(raw) && Number.isSafeInteger(v);
+const isPort = (v, raw) => isNonNegativeInt(v, raw) && v >= 1 && v <= 65535;
 
 // Fails loudly on bad input: Math.random() < NaN is always false, so a typo
 // like FAILURE_RATE=abc would otherwise silently switch failures off.
@@ -18,7 +18,7 @@ export function loadConfig(env = {}) {
     const raw = env[name];
     if (raw === undefined) return DEFAULTS[name];
     const value = raw.trim() === '' ? NaN : Number(raw);
-    if (!isValid(value)) errors.push(`${name}=${JSON.stringify(raw)} must be ${rule}`);
+    if (!isValid(value, raw)) errors.push(`${name}=${JSON.stringify(raw)} must be ${rule}`);
     return value;
   };
 

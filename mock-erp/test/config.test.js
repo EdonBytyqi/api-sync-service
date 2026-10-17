@@ -37,6 +37,9 @@ describe('Anforderung 6 – Konfiguration (Laden und Validieren)', () => {
     ['RATE_LIMIT_RATE', '20%'],
     ['SLOW_MS', '-1'],
     ['SLOW_MS', '2.5'],
+    ['SLOW_MS', '1e3'],
+    ['PORT', '0x10'],
+    ['PORT', ' 4000'],
     ['PORT', '0'],
     ['PORT', '70000'],
   ])('AK-6.4 %s=%j wird abgelehnt und benannt', (name, value) => {
