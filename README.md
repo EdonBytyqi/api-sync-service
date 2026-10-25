@@ -198,6 +198,11 @@ This project is already instrumented. Create a free account at [observe.nestjs.c
 
 The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
 
+## Working with AI
+
+How I use AI assistants on this project, safely and responsibly: [AI_GUIDE.md](AI_GUIDE.md).
+In short: *AI delivers the code, I take the accountability.*
+
 ## Resources
 
 Check out a few resources that may come in handy when working with NestJS:
